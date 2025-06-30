@@ -42,26 +42,13 @@ jobs:
 
       - name: Build application
         run: pnpm build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get version from tag
         id: get_version
         shell: bash
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Create changes.md from latest release notes
-        shell: bash
-        run: |
-          cat > changes.md << 'EOF'
-          # Version ${{ steps.get_version.outputs.VERSION }}
-
-          ## What's New
-          - Bug fixes and performance improvements
-          - Updated dependencies
-
-          ## Notes
-          - This is an automated release
-          - Please report any issues on GitHub
-          EOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -70,9 +57,8 @@ jobs:
             dist/*.exe
             dist/*.exe.blockmap
             dist/latest.yml
-            changes.md
+          body_path: ./changes.md
           draft: false
           prerelease: false
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
