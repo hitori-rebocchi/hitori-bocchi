@@ -57,6 +57,10 @@ export function UpdateDialogMock({ isOpen, onClose }: UpdateDialogMockProps) {
       }, 200)
       return () => clearTimeout(timer)
     }
+
+    return () => {
+      setDownloadProgress(0)
+    }
   }, [isDownloading, downloadProgress])
 
   const handleDownload = () => {
