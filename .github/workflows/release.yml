@@ -44,7 +44,9 @@ jobs:
         run: pnpm install
 
       - name: Build application
-        run: pnpm build:win
+        run: |
+          pnpm run build
+          pnpm electron-builder --win --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
