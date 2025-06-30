@@ -57,6 +57,22 @@ export interface IApi {
   // Settings
   getSettings: (key?: string) => Promise<any>
   setSettings: (key: string, value: any) => Promise<void>
+
+  // Auto-updater
+  checkForUpdates: () => Promise<{ success: boolean; updateInfo?: any; error?: string }>
+  downloadUpdate: () => Promise<{ success: boolean; error?: string }>
+  quitAndInstall: () => void
+  getUpdateChangelog: () => Promise<{ success: boolean; changelog?: string | null; error?: string }>
+  getUpdateInfo: () => Promise<any>
+  onUpdateChecking: (callback: () => void) => void
+  onUpdateAvailable: (callback: (info: any) => void) => void
+  onUpdateNotAvailable: (callback: () => void) => void
+  onUpdateError: (callback: (error: string) => void) => void
+  onUpdateDownloadProgress: (callback: (progress: any) => void) => void
+  onUpdateDownloaded: (callback: () => void) => void
+
+  // App info
+  getAppVersion: () => Promise<string>
 }
 
 declare global {

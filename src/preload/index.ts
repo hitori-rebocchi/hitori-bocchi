@@ -50,7 +50,35 @@ const api = {
 
   // Settings
   getSettings: (key?: string) => ipcRenderer.invoke('get-settings', key),
-  setSettings: (key: string, value: any) => ipcRenderer.invoke('set-settings', key, value)
+  setSettings: (key: string, value: any) => ipcRenderer.invoke('set-settings', key, value),
+
+  // Auto-updater
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
+  getUpdateChangelog: () => ipcRenderer.invoke('get-update-changelog'),
+  getUpdateInfo: () => ipcRenderer.invoke('get-update-info'),
+  onUpdateChecking: (callback: () => void) => {
+    ipcRenderer.on('update-checking', callback)
+  },
+  onUpdateAvailable: (callback: (info: any) => void) => {
+    ipcRenderer.on('update-available', (_, info) => callback(info))
+  },
+  onUpdateNotAvailable: (callback: () => void) => {
+    ipcRenderer.on('update-not-available', callback)
+  },
+  onUpdateError: (callback: (error: string) => void) => {
+    ipcRenderer.on('update-error', (_, error) => callback(error))
+  },
+  onUpdateDownloadProgress: (callback: (progress: any) => void) => {
+    ipcRenderer.on('update-download-progress', (_, progress) => callback(progress))
+  },
+  onUpdateDownloaded: (callback: () => void) => {
+    ipcRenderer.on('update-downloaded', callback)
+  },
+
+  // App info
+  getAppVersion: () => ipcRenderer.invoke('get-app-version')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { FilterPanel } from './components/FilterPanel'
 import { GridViewToggle } from './components/GridViewToggle'
 import { TitleBar } from './components/TitleBar'
+import { UpdateDialog } from './components/UpdateDialog'
+import { ChampionDataUpdateDialog } from './components/ChampionDataUpdateDialog'
 import { LocaleProvider } from './contexts/LocaleContextProvider'
 import { useLocale } from './contexts/useLocale'
 import {
@@ -64,6 +66,10 @@ function AppContent(): React.JSX.Element {
   const [toolsExist, setToolsExist] = useState<boolean | null>(null)
   const [downloadingTools, setDownloadingTools] = useState<boolean>(false)
   const [toolsDownloadProgress, setToolsDownloadProgress] = useState<number>(0)
+  const [showUpdateDialog, setShowUpdateDialog] = useState<boolean>(false)
+  const [appVersion, setAppVersion] = useState<string>('')
+  const [showChampionDataUpdate, setShowChampionDataUpdate] = useState<boolean>(false)
+  const [isUpdatingChampionData, setIsUpdatingChampionData] = useState<boolean>(false)
 
   // Jotai atoms for persisted state
   const [championSearchQuery, setChampionSearchQuery] = useAtom(championSearchQueryAtom)
@@ -98,10 +104,24 @@ function AppContent(): React.JSX.Element {
           setSelectedChampion(result.data.champions[0])
           setSelectedChampionKey(result.data.champions[0].key)
         }
+
+        return result.data
       }
+      return null
     },
     [currentLanguage, selectedChampionKey, selectedChampion, setSelectedChampionKey]
   )
+
+  const checkChampionDataUpdates = useCallback(async () => {
+    try {
+      const result = await window.api.checkChampionUpdates(currentLanguage)
+      if (result.success && result.needsUpdate) {
+        setShowChampionDataUpdate(true)
+      }
+    } catch (error) {
+      console.error('Failed to check champion data updates:', error)
+    }
+  }, [currentLanguage])
 
   const detectGamePath = useCallback(async () => {
     const result = await window.api.detectGame()
@@ -115,13 +135,27 @@ function AppContent(): React.JSX.Element {
 
   // Load data on component mount
   useEffect(() => {
-    checkPatcherStatus()
-    loadChampionData()
-    detectGamePath()
-    loadDownloadedSkins()
-    loadFavorites()
-    checkToolsExist()
-  }, [detectGamePath, loadChampionData])
+    const initializeApp = async () => {
+      checkPatcherStatus()
+      const data = await loadChampionData()
+      detectGamePath()
+      loadDownloadedSkins()
+      loadFavorites()
+      checkToolsExist()
+      loadAppVersion()
+
+      // Check for champion data updates after initial load
+      if (data) {
+        checkChampionDataUpdates()
+      }
+    }
+
+    initializeApp()
+  }, [detectGamePath, loadChampionData, checkChampionDataUpdates])
+
+  useEffect(() => {
+    checkForUpdates()
+  }, [])
 
   // Clear search queries on mount
   useEffect(() => {
@@ -133,6 +167,14 @@ function AppContent(): React.JSX.Element {
   useEffect(() => {
     window.api.onToolsDownloadProgress((progress) => {
       setToolsDownloadProgress(progress)
+    })
+  }, [])
+
+  // Set up update event listeners
+  useEffect(() => {
+    window.api.onUpdateAvailable((info) => {
+      console.log('Update available:', info)
+      setShowUpdateDialog(true)
     })
   }, [])
 
@@ -152,6 +194,41 @@ function AppContent(): React.JSX.Element {
   const checkToolsExist = async () => {
     const exist = await window.api.checkToolsExist()
     setToolsExist(exist)
+  }
+
+  const checkForUpdates = async () => {
+    try {
+      const result = await window.api.checkForUpdates()
+      // Only proceed if we're in production (result will be null in dev)
+      if (result && result.success) {
+        console.log('Update check completed')
+      }
+    } catch (error) {
+      console.error('Failed to check for updates:', error)
+    }
+  }
+
+  const loadAppVersion = async () => {
+    try {
+      const version = await window.api.getAppVersion()
+      setAppVersion(version)
+    } catch (error) {
+      console.error('Failed to load app version:', error)
+    }
+  }
+
+  const handleChampionDataUpdate = async () => {
+    setIsUpdatingChampionData(true)
+    try {
+      await fetchChampionData()
+      setShowChampionDataUpdate(false)
+      // Reload the data after update
+      await loadChampionData(true) // preserve selection
+    } catch (error) {
+      console.error('Failed to update champion data:', error)
+    } finally {
+      setIsUpdatingChampionData(false)
+    }
   }
 
   const downloadTools = async () => {
@@ -468,7 +545,15 @@ function AppContent(): React.JSX.Element {
 
   return (
     <>
-      <TitleBar />
+      <TitleBar appVersion={appVersion} />
+      <UpdateDialog isOpen={showUpdateDialog} onClose={() => setShowUpdateDialog(false)} />
+      <ChampionDataUpdateDialog
+        isOpen={showChampionDataUpdate}
+        onUpdate={handleChampionDataUpdate}
+        onSkip={() => setShowChampionDataUpdate(false)}
+        currentVersion={championData?.version}
+        isUpdating={isUpdatingChampionData}
+      />
       <div className="flex flex-col h-screen pt-10 bg-cream-300 dark:bg-charcoal-950 text-charcoal-950 dark:text-cream-50 overflow-hidden transition-colors duration-200">
         {toolsExist === false && (
           <div className="fixed inset-0 bg-charcoal-950 bg-opacity-50 dark:bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
@@ -615,8 +700,8 @@ function AppContent(): React.JSX.Element {
                 })}
               </div>
               {championData && (
-                <div className="px-6 py-4 text-xs text-charcoal-700 dark:text-charcoal-400 font-medium border-t-2 border-charcoal-200 dark:border-charcoal-800 bg-cream-100 dark:bg-charcoal-950">
-                  Version: {championData.version}
+                <div className="px-6 py-4 text-xs text-charcoal-500 dark:text-charcoal-500 border-t-2 border-charcoal-200 dark:border-charcoal-800 bg-cream-100 dark:bg-charcoal-950">
+                  <div>Champion data: v{championData.version}</div>
                 </div>
               )}
             </div>

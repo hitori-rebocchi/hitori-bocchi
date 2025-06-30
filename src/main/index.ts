@@ -9,6 +9,7 @@ import { ChampionDataService } from './services/championDataService'
 import { FavoritesService } from './services/favoritesService'
 import { ToolsDownloader } from './services/toolsDownloader'
 import { SettingsService } from './services/settingsService'
+import { UpdaterService } from './services/updaterService'
 
 // Initialize services
 const gameDetector = new GameDetector()
@@ -18,6 +19,7 @@ const championDataService = new ChampionDataService()
 const favoritesService = new FavoritesService()
 const toolsDownloader = new ToolsDownloader()
 const settingsService = new SettingsService()
+const updaterService = new UpdaterService()
 
 function createWindow(): void {
   // Create the browser window.
@@ -39,6 +41,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    updaterService.setMainWindow(mainWindow)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -312,5 +315,46 @@ function setupIpcHandlers(): void {
 
   ipcMain.handle('set-settings', async (_, key: string, value: any) => {
     settingsService.set(key, value)
+  })
+
+  // Auto-updater handlers
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      const result = await updaterService.checkForUpdates()
+      return { success: true, updateInfo: result }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle('download-update', async () => {
+    try {
+      await updaterService.downloadUpdate()
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle('quit-and-install', () => {
+    updaterService.quitAndInstall()
+  })
+
+  ipcMain.handle('get-update-changelog', async () => {
+    try {
+      const changelog = await updaterService.getChangelog()
+      return { success: true, changelog }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle('get-update-info', () => {
+    return updaterService.getUpdateInfo()
+  })
+
+  // App info
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion()
   })
 }

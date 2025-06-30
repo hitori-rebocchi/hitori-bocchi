@@ -26,7 +26,9 @@ nsis:
   createStartMenuShortcut: true
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: hoangvu12
+  repo: bocchi
+  releaseType: release
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
