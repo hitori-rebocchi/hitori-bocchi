@@ -21,7 +21,8 @@ interface Skin {
 export class ChampionDataService {
   private apiVersion: string = ''
   private supportedLanguages = ['en_US', 'vi_VN']
-  private githubDataUrl = 'https://raw.githubusercontent.com/nguyenvu/bocchi/champion-data/data'
+  private githubDataUrl =
+    'https://raw.githubusercontent.com/hoangvu12/bocchi/refs/heads/champion-data/data'
   private cachedData: Map<string, { version: string; champions: Champion[] }> = new Map()
 
   constructor() {
