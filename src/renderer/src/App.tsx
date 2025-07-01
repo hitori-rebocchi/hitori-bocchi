@@ -1,5 +1,5 @@
 import { useAtom } from 'jotai'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import AutoSizer from 'react-virtualized-auto-sizer'
 import { FilterPanel } from './components/FilterPanel'
@@ -58,9 +58,19 @@ function AppContent(): React.JSX.Element {
   const { t } = useTranslation()
   const { currentLanguage } = useLocale()
   const [gamePath, setGamePath] = useState<string>('')
-  const [loading, setLoading] = useState<boolean>(false)
+  // Granular loading states
+  const [isLoadingChampionData, setIsLoadingChampionData] = useState<boolean>(false)
+  const [isApplyingSkins, setIsApplyingSkins] = useState<boolean>(false)
+  const [isDeletingSkin, setIsDeletingSkin] = useState<boolean>(false)
+  const [isStoppingPatcher, setIsStoppingPatcher] = useState<boolean>(false)
+
+  // Computed loading state for UI
+  const loading = isLoadingChampionData || isApplyingSkins || isDeletingSkin || isStoppingPatcher
   const [statusMessage, setStatusMessage] = useState<string>('')
   const [isPatcherRunning, setIsPatcherRunning] = useState<boolean>(false)
+
+  // Race condition prevention
+  const activeOperationRef = useRef<string | null>(null)
 
   // Champion browser states
   const [championData, setChampionData] = useState<ChampionData | null>(null)
@@ -90,34 +100,47 @@ function AppContent(): React.JSX.Element {
       if (result.success && result.data) {
         setChampionData(result.data)
 
-        // Try to restore selected champion from persisted key
-        if (selectedChampionKey && selectedChampionKey !== 'all') {
-          const champion = result.data.champions.find((c) => c.key === selectedChampionKey)
-          if (champion) {
-            setSelectedChampion(champion)
-            return
+        // Use functional state updates to avoid dependency on current state values
+        setSelectedChampionKey((currentKey) => {
+          // Try to restore selected champion from persisted key
+          if (currentKey && currentKey !== 'all') {
+            const champion = result.data.champions.find((c) => c.key === currentKey)
+            if (champion) {
+              setSelectedChampion(champion)
+              return currentKey
+            }
+          } else if (currentKey === 'all') {
+            setSelectedChampion(null)
+            return currentKey
           }
-        } else if (selectedChampionKey === 'all') {
-          setSelectedChampion(null)
-          return
-        }
 
-        if (preserveSelection && selectedChampion) {
-          // Try to preserve the current selection
-          const sameChampion = result.data.champions.find((c) => c.key === selectedChampion.key)
-          setSelectedChampion(sameChampion || null)
-          setSelectedChampionKey(sameChampion?.key || 'all')
-        } else if (!selectedChampion && !selectedChampionKey) {
           // Default to "all" if nothing is selected
-          setSelectedChampion(null)
-          setSelectedChampionKey('all')
+          if (!currentKey) {
+            setSelectedChampion(null)
+            return 'all'
+          }
+
+          return currentKey
+        })
+
+        // Handle preserve selection separately to avoid dependencies
+        if (preserveSelection) {
+          setSelectedChampion((currentChampion) => {
+            if (currentChampion) {
+              const sameChampion = result.data.champions.find((c) => c.key === currentChampion.key)
+              if (sameChampion) {
+                return sameChampion
+              }
+            }
+            return currentChampion
+          })
         }
 
         return result.data
       }
       return null
     },
-    [currentLanguage, selectedChampionKey, selectedChampion, setSelectedChampionKey]
+    [currentLanguage, setSelectedChampionKey, setSelectedChampion]
   )
 
   const checkChampionDataUpdates = useCallback(async () => {
@@ -171,17 +194,25 @@ function AppContent(): React.JSX.Element {
 
   // Set up tools download progress listener
   useEffect(() => {
-    window.api.onToolsDownloadProgress((progress) => {
+    const unsubscribe = window.api.onToolsDownloadProgress((progress) => {
       setToolsDownloadProgress(progress)
     })
+
+    return () => {
+      unsubscribe()
+    }
   }, [])
 
   // Set up update event listeners
   useEffect(() => {
-    window.api.onUpdateAvailable((info) => {
+    const unsubscribe = window.api.onUpdateAvailable((info) => {
       console.log('Update available:', info)
       setShowUpdateDialog(true)
     })
+
+    return () => {
+      unsubscribe()
+    }
   }, [])
 
   // Reload champion data when language changes
@@ -191,6 +222,27 @@ function AppContent(): React.JSX.Element {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLanguage])
+
+  // Add timeout mechanism to prevent stuck loading states
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        setIsLoadingChampionData(false)
+        setIsApplyingSkins(false)
+        setIsDeletingSkin(false)
+        setIsStoppingPatcher(false)
+        setStatusMessage('Operation timed out. Please try again.')
+      }, 30000) // 30 second timeout
+
+      return () => {
+        clearTimeout(timeout)
+      }
+    }
+
+    return () => {
+      console.log('[Loading Timeout] Clearing timeout')
+    }
+  }, [loading])
 
   const checkPatcherStatus = async () => {
     const isRunning = await window.api.isPatcherRunning()
@@ -274,18 +326,31 @@ function AppContent(): React.JSX.Element {
   }
 
   const fetchChampionData = async () => {
-    setLoading(true)
-    setStatusMessage(t('status.fetchingData'))
-
-    const result = await window.api.fetchChampionData(currentLanguage)
-    if (result.success) {
-      setStatusMessage(t('status.dataFetched', { count: result.championCount }))
-      await loadChampionData()
-    } else {
-      setStatusMessage(`${t('errors.generic')}: ${result.message}`)
+    // Prevent concurrent fetches
+    if (activeOperationRef.current === 'fetchChampionData') {
+      return
     }
 
-    setLoading(false)
+    activeOperationRef.current = 'fetchChampionData'
+    setIsLoadingChampionData(true)
+    setStatusMessage(t('status.fetchingData'))
+
+    try {
+      const result = await window.api.fetchChampionData(currentLanguage)
+      if (result.success) {
+        setStatusMessage(t('status.dataFetched', { count: result.championCount }))
+        await loadChampionData()
+      } else {
+        setStatusMessage(`${t('errors.generic')}: ${result.message}`)
+      }
+    } catch (error) {
+      setStatusMessage(
+        `${t('errors.generic')}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
+    } finally {
+      setIsLoadingChampionData(false)
+      activeOperationRef.current = null
+    }
   }
 
   const browseForGame = async () => {
@@ -333,7 +398,13 @@ function AppContent(): React.JSX.Element {
       return
     }
 
-    setLoading(true)
+    // Prevent concurrent skin applications
+    if (activeOperationRef.current === 'applySelectedSkins') {
+      return
+    }
+
+    activeOperationRef.current = 'applySelectedSkins'
+    setIsApplyingSkins(true)
 
     try {
       // Stop patcher if running
@@ -415,24 +486,31 @@ function AppContent(): React.JSX.Element {
       }
     } catch (error) {
       setStatusMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsApplyingSkins(false)
+      activeOperationRef.current = null
     }
-
-    setLoading(false)
   }
 
   const stopPatcher = async () => {
-    setLoading(true)
+    setIsStoppingPatcher(true)
     setStatusMessage('Stopping patcher')
 
-    const result = await window.api.stopPatcher()
-    if (result.success) {
-      setStatusMessage('Patcher stopped')
-      setIsPatcherRunning(false)
-      // setSelectedSkinId(null)
-      // setSelectedChromaId(null)
+    try {
+      const result = await window.api.stopPatcher()
+      if (result.success) {
+        setStatusMessage('Patcher stopped')
+        setIsPatcherRunning(false)
+      } else {
+        setStatusMessage(`Failed to stop patcher: ${result.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      setStatusMessage(
+        `Error stopping patcher: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
+    } finally {
+      setIsStoppingPatcher(false)
     }
-
-    setLoading(false)
   }
 
   // Filter champions based on search
@@ -554,6 +632,15 @@ function AppContent(): React.JSX.Element {
       sortBy: 'name-asc'
     })
   }
+
+  // Memoized champion select handler to prevent unnecessary re-renders
+  const handleChampionSelect = useCallback(
+    (champion: Champion | null, key: string) => {
+      setSelectedChampion(champion)
+      setSelectedChampionKey(key)
+    },
+    [setSelectedChampionKey]
+  )
 
   // Calculate stats for filter panel
   const calculateStats = () => {
@@ -698,10 +785,7 @@ function AppContent(): React.JSX.Element {
                       champions={filteredChampions}
                       selectedChampion={selectedChampion}
                       selectedChampionKey={selectedChampionKey}
-                      onChampionSelect={(champion, key) => {
-                        setSelectedChampion(champion)
-                        setSelectedChampionKey(key)
-                      }}
+                      onChampionSelect={handleChampionSelect}
                       height={height}
                       width={width}
                     />
@@ -839,24 +923,83 @@ function AppContent(): React.JSX.Element {
           />
         ) : (
           <div className="border-t-2 border-charcoal-200 dark:border-charcoal-800 bg-white dark:bg-charcoal-900 px-8 py-4 shadow-md dark:shadow-none">
-            <div className="text-sm text-charcoal-800 dark:text-charcoal-300 font-medium flex items-center gap-3">
-              {loading && (
-                <div className="flex items-center gap-1.5">
-                  <div
-                    className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
-                    style={{ animationDelay: '0ms' }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
-                    style={{ animationDelay: '150ms' }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
-                    style={{ animationDelay: '300ms' }}
-                  ></div>
+            <div className="text-sm text-charcoal-800 dark:text-charcoal-300 font-medium flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {loading && (
+                  <div className="flex items-center gap-1.5">
+                    <div
+                      className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
+                      style={{ animationDelay: '0ms' }}
+                    ></div>
+                    <div
+                      className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
+                      style={{ animationDelay: '150ms' }}
+                    ></div>
+                    <div
+                      className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
+                      style={{ animationDelay: '300ms' }}
+                    ></div>
+                  </div>
+                )}
+                <span
+                  className={
+                    statusMessage?.includes('Error') || statusMessage?.includes('Failed')
+                      ? 'text-red-600 dark:text-red-400'
+                      : ''
+                  }
+                >
+                  {statusMessage || t('app.ready')}
+                </span>
+              </div>
+
+              {/* Error recovery actions */}
+              {(statusMessage?.includes('Error') ||
+                statusMessage?.includes('Failed') ||
+                statusMessage?.includes('timed out')) && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setStatusMessage('')
+                      // Reset all loading states
+                      setIsLoadingChampionData(false)
+                      setIsApplyingSkins(false)
+                      setIsDeletingSkin(false)
+                      setIsStoppingPatcher(false)
+                      activeOperationRef.current = null
+                    }}
+                    className="px-3 py-1.5 text-xs bg-charcoal-100 dark:bg-charcoal-800 hover:bg-charcoal-200 dark:hover:bg-charcoal-700 text-charcoal-700 dark:text-charcoal-300 rounded transition-colors"
+                  >
+                    Clear
+                  </button>
+                  {statusMessage?.includes('champion data') && (
+                    <button
+                      onClick={fetchChampionData}
+                      disabled={loading}
+                      className="px-3 py-1.5 text-xs bg-terracotta-500 hover:bg-terracotta-600 disabled:bg-terracotta-300 text-white rounded transition-colors disabled:cursor-not-allowed"
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
               )}
-              {statusMessage || t('app.ready')}
+
+              {/* Manual reset button for stuck states */}
+              {loading && (
+                <button
+                  onClick={() => {
+                    setIsLoadingChampionData(false)
+                    setIsApplyingSkins(false)
+                    setIsDeletingSkin(false)
+                    setIsStoppingPatcher(false)
+                    activeOperationRef.current = null
+                    setStatusMessage('Reset completed')
+                  }}
+                  className="px-3 py-1.5 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded transition-colors"
+                  title="Force reset if the app seems stuck"
+                >
+                  Force Reset
+                </button>
+              )}
             </div>
           </div>
         )}

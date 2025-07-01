@@ -46,7 +46,7 @@ export interface IApi {
     version?: string
     error?: string
   }>
-  onToolsDownloadProgress: (callback: (progress: number) => void) => void
+  onToolsDownloadProgress: (callback: (progress: number) => void) => () => void
 
   // Window controls
   minimizeWindow: () => void
@@ -65,20 +65,20 @@ export interface IApi {
   cancelUpdate: () => Promise<{ success: boolean }>
   getUpdateChangelog: () => Promise<{ success: boolean; changelog?: string | null; error?: string }>
   getUpdateInfo: () => Promise<any>
-  onUpdateChecking: (callback: () => void) => void
-  onUpdateAvailable: (callback: (info: any) => void) => void
-  onUpdateNotAvailable: (callback: () => void) => void
-  onUpdateError: (callback: (error: string) => void) => void
-  onUpdateDownloadProgress: (callback: (progress: any) => void) => void
-  onUpdateDownloaded: (callback: () => void) => void
+  onUpdateChecking: (callback: () => void) => () => void
+  onUpdateAvailable: (callback: (info: any) => void) => () => void
+  onUpdateNotAvailable: (callback: () => void) => () => void
+  onUpdateError: (callback: (error: string) => void) => () => void
+  onUpdateDownloadProgress: (callback: (progress: any) => void) => () => void
+  onUpdateDownloaded: (callback: () => void) => () => void
 
   // App info
   getAppVersion: () => Promise<string>
 
   // Patcher events
-  onPatcherStatus: (callback: (status: string) => void) => void
-  onPatcherMessage: (callback: (message: string) => void) => void
-  onPatcherError: (callback: (error: string) => void) => void
+  onPatcherStatus: (callback: (status: string) => void) => () => void
+  onPatcherMessage: (callback: (message: string) => void) => () => void
+  onPatcherError: (callback: (error: string) => void) => () => void
 }
 
 declare global {

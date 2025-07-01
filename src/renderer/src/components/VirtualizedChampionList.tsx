@@ -11,7 +11,7 @@ interface VirtualizedChampionListProps {
   width: number
 }
 
-export const VirtualizedChampionList: React.FC<VirtualizedChampionListProps> = ({
+const VirtualizedChampionListComponent: React.FC<VirtualizedChampionListProps> = ({
   champions,
   selectedChampion,
   selectedChampionKey,
@@ -144,3 +144,9 @@ export const VirtualizedChampionList: React.FC<VirtualizedChampionListProps> = (
     </List>
   )
 }
+
+// Add display name for debugging
+VirtualizedChampionListComponent.displayName = 'VirtualizedChampionList'
+
+// Export memoized component
+export const VirtualizedChampionList = React.memo(VirtualizedChampionListComponent)

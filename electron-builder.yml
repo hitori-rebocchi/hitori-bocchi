@@ -21,7 +21,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   artifactName: Bocchi-${version}-setup.${ext}
   shortcutName: Bocchi
-  uninstallDisplayName: Bocchi - League of Legends Skin Manager
+  uninstallDisplayName: Bocchi - League of Legends Skin Changer
   createDesktopShortcut: always
   createStartMenuShortcut: true
   deleteAppDataOnUninstall: false

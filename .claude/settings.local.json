@@ -1,6 +1,6 @@
 {
   "permissions": {
-    "allow": ["Bash(cp:*)"],
+    "allow": ["Bash(cp:*)", "Bash(rg:*)"],
     "deny": []
   }
 }

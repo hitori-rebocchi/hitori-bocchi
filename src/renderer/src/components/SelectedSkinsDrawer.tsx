@@ -33,27 +33,28 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
     console.log('[SelectedSkinsDrawer] Setting up patcher event listeners')
 
     // Listen for patcher status updates
-    window.api.onPatcherStatus((status: string) => {
+    const unsubscribeStatus = window.api.onPatcherStatus((status: string) => {
       console.log('[SelectedSkinsDrawer] Received patcher-status:', status)
       setPatcherStatus(status)
     })
 
     // Listen for patcher messages
-    window.api.onPatcherMessage((message: string) => {
+    const unsubscribeMessage = window.api.onPatcherMessage((message: string) => {
       console.log('[SelectedSkinsDrawer] Received patcher-message:', message)
       setPatcherMessages((prev) => [...prev.slice(-4), message]) // Keep last 5 messages
     })
 
     // Listen for patcher errors
-    window.api.onPatcherError((error: string) => {
+    const unsubscribeError = window.api.onPatcherError((error: string) => {
       console.error('[SelectedSkinsDrawer] Received patcher-error:', error)
       setPatcherMessages((prev) => [...prev.slice(-4), `Error: ${error}`])
     })
 
     return () => {
       console.log('[SelectedSkinsDrawer] Cleaning up patcher event listeners')
-      // Cleanup listeners (Note: Electron doesn't return unsubscribe functions by default)
-      // You might need to implement removeListener functionality if needed
+      unsubscribeStatus()
+      unsubscribeMessage()
+      unsubscribeError()
     }
   }, [])
 

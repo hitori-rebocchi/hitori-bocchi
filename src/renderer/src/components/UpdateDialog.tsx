@@ -22,20 +22,27 @@ export function UpdateDialog({ isOpen, onClose }: UpdateDialogProps) {
 
   useEffect(() => {
     // Set up event listeners for updater events
-    window.api.onUpdateDownloadProgress((progress) => {
+    const unsubscribeProgress = window.api.onUpdateDownloadProgress((progress) => {
       setDownloadProgress(progress.percent)
     })
 
-    window.api.onUpdateDownloaded(() => {
+    const unsubscribeDownloaded = window.api.onUpdateDownloaded(() => {
       setIsDownloading(false)
       // Update will auto-install, just close the dialog
       onClose()
     })
 
-    window.api.onUpdateError((error) => {
+    const unsubscribeError = window.api.onUpdateError((error) => {
       setError(error)
       setIsDownloading(false)
     })
+
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeProgress()
+      unsubscribeDownloaded()
+      unsubscribeError()
+    }
   }, [onClose])
 
   const loadUpdateInfo = async () => {

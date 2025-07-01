@@ -1,4 +1,4 @@
-# Bocchi - League of Legends Skin Manager
+# Bocchi - League of Legends Skin Changer
 
 <div align="center">
   <img src="./build/logo.png" alt="Bocchi Logo" width="128" height="128">

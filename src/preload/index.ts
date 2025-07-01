@@ -39,7 +39,9 @@ const api = {
   downloadTools: () => ipcRenderer.invoke('download-tools'),
   getToolsInfo: () => ipcRenderer.invoke('get-tools-info'),
   onToolsDownloadProgress: (callback: (progress: number) => void) => {
-    ipcRenderer.on('tools-download-progress', (_, progress) => callback(progress))
+    const handler = (_: any, progress: number) => callback(progress)
+    ipcRenderer.on('tools-download-progress', handler)
+    return () => ipcRenderer.removeListener('tools-download-progress', handler)
   },
 
   // Window controls
@@ -61,21 +63,30 @@ const api = {
   getUpdateInfo: () => ipcRenderer.invoke('get-update-info'),
   onUpdateChecking: (callback: () => void) => {
     ipcRenderer.on('update-checking', callback)
+    return () => ipcRenderer.removeListener('update-checking', callback)
   },
   onUpdateAvailable: (callback: (info: any) => void) => {
-    ipcRenderer.on('update-available', (_, info) => callback(info))
+    const handler = (_: any, info: any) => callback(info)
+    ipcRenderer.on('update-available', handler)
+    return () => ipcRenderer.removeListener('update-available', handler)
   },
   onUpdateNotAvailable: (callback: () => void) => {
     ipcRenderer.on('update-not-available', callback)
+    return () => ipcRenderer.removeListener('update-not-available', callback)
   },
   onUpdateError: (callback: (error: string) => void) => {
-    ipcRenderer.on('update-error', (_, error) => callback(error))
+    const handler = (_: any, error: string) => callback(error)
+    ipcRenderer.on('update-error', handler)
+    return () => ipcRenderer.removeListener('update-error', handler)
   },
   onUpdateDownloadProgress: (callback: (progress: any) => void) => {
-    ipcRenderer.on('update-download-progress', (_, progress) => callback(progress))
+    const handler = (_: any, progress: any) => callback(progress)
+    ipcRenderer.on('update-download-progress', handler)
+    return () => ipcRenderer.removeListener('update-download-progress', handler)
   },
   onUpdateDownloaded: (callback: () => void) => {
     ipcRenderer.on('update-downloaded', callback)
+    return () => ipcRenderer.removeListener('update-downloaded', callback)
   },
 
   // App info
@@ -84,24 +95,30 @@ const api = {
   // Patcher events
   onPatcherStatus: (callback: (status: string) => void) => {
     console.log('[Preload] Registering patcher-status listener')
-    ipcRenderer.on('patcher-status', (_, status) => {
+    const handler = (_: any, status: string) => {
       console.log('[Preload] Received patcher-status:', status)
       callback(status)
-    })
+    }
+    ipcRenderer.on('patcher-status', handler)
+    return () => ipcRenderer.removeListener('patcher-status', handler)
   },
   onPatcherMessage: (callback: (message: string) => void) => {
     console.log('[Preload] Registering patcher-message listener')
-    ipcRenderer.on('patcher-message', (_, message) => {
+    const handler = (_: any, message: string) => {
       console.log('[Preload] Received patcher-message:', message)
       callback(message)
-    })
+    }
+    ipcRenderer.on('patcher-message', handler)
+    return () => ipcRenderer.removeListener('patcher-message', handler)
   },
   onPatcherError: (callback: (error: string) => void) => {
     console.log('[Preload] Registering patcher-error listener')
-    ipcRenderer.on('patcher-error', (_, error) => {
+    const handler = (_: any, error: string) => {
       console.log('[Preload] Received patcher-error:', error)
       callback(error)
-    })
+    }
+    ipcRenderer.on('patcher-error', handler)
+    return () => ipcRenderer.removeListener('patcher-error', handler)
   }
 }
 
