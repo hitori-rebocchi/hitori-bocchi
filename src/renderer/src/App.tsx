@@ -1,11 +1,15 @@
 import { useAtom } from 'jotai'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import AutoSizer from 'react-virtualized-auto-sizer'
 import { FilterPanel } from './components/FilterPanel'
 import { GridViewToggle } from './components/GridViewToggle'
 import { TitleBar } from './components/TitleBar'
 import { UpdateDialog } from './components/UpdateDialog'
 import { ChampionDataUpdateDialog } from './components/ChampionDataUpdateDialog'
+import { SelectedSkinsDrawer } from './components/SelectedSkinsDrawer'
+import { VirtualizedSkinGrid } from './components/VirtualizedSkinGrid'
+import { VirtualizedChampionList } from './components/VirtualizedChampionList'
 import { LocaleProvider } from './contexts/LocaleContextProvider'
 import { useLocale } from './contexts/useLocale'
 import {
@@ -14,10 +18,12 @@ import {
   selectedChampionKeyAtom,
   showFavoritesOnlyAtom,
   skinSearchQueryAtom,
-  viewModeAtom
+  viewModeAtom,
+  selectedSkinsAtom,
+  type SelectedSkin
 } from './store/atoms'
 
-interface Champion {
+export interface Champion {
   id: number
   key: string
   name: string
@@ -27,7 +33,7 @@ interface Champion {
   tags: string[]
 }
 
-interface Skin {
+export interface Skin {
   id: string
   num: number
   name: string
@@ -59,9 +65,7 @@ function AppContent(): React.JSX.Element {
   // Champion browser states
   const [championData, setChampionData] = useState<ChampionData | null>(null)
   const [selectedChampion, setSelectedChampion] = useState<Champion | null>(null)
-  const [selectedSkinId, setSelectedSkinId] = useState<string | null>(null)
   const [downloadedSkins, setDownloadedSkins] = useState<DownloadedSkin[]>([])
-  const [selectedChromaId, setSelectedChromaId] = useState<string | null>(null)
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [toolsExist, setToolsExist] = useState<boolean | null>(null)
   const [downloadingTools, setDownloadingTools] = useState<boolean>(false)
@@ -78,6 +82,7 @@ function AppContent(): React.JSX.Element {
   const [viewMode, setViewMode] = useAtom(viewModeAtom)
   const [filters, setFilters] = useAtom(filtersAtom)
   const [selectedChampionKey, setSelectedChampionKey] = useAtom(selectedChampionKeyAtom)
+  const [selectedSkins, setSelectedSkins] = useAtom(selectedSkinsAtom)
 
   const loadChampionData = useCallback(
     async (preserveSelection = false) => {
@@ -86,23 +91,26 @@ function AppContent(): React.JSX.Element {
         setChampionData(result.data)
 
         // Try to restore selected champion from persisted key
-        if (selectedChampionKey) {
+        if (selectedChampionKey && selectedChampionKey !== 'all') {
           const champion = result.data.champions.find((c) => c.key === selectedChampionKey)
           if (champion) {
             setSelectedChampion(champion)
             return
           }
+        } else if (selectedChampionKey === 'all') {
+          setSelectedChampion(null)
+          return
         }
 
         if (preserveSelection && selectedChampion) {
           // Try to preserve the current selection
           const sameChampion = result.data.champions.find((c) => c.key === selectedChampion.key)
-          setSelectedChampion(sameChampion || result.data.champions[0])
-          setSelectedChampionKey(sameChampion?.key || result.data.champions[0]?.key || null)
-        } else if (!selectedChampion && result.data.champions.length > 0) {
-          // Only select first champion if none is selected
-          setSelectedChampion(result.data.champions[0])
-          setSelectedChampionKey(result.data.champions[0].key)
+          setSelectedChampion(sameChampion || null)
+          setSelectedChampionKey(sameChampion?.key || 'all')
+        } else if (!selectedChampion && !selectedChampionKey) {
+          // Default to "all" if nothing is selected
+          setSelectedChampion(null)
+          setSelectedChampionKey('all')
         }
 
         return result.data
@@ -153,9 +161,7 @@ function AppContent(): React.JSX.Element {
     initializeApp()
   }, [detectGamePath, loadChampionData, checkChampionDataUpdates])
 
-  useEffect(() => {
-    checkForUpdates()
-  }, [])
+  // Update checking is now handled in the main process on app startup
 
   // Clear search queries on mount
   useEffect(() => {
@@ -194,18 +200,6 @@ function AppContent(): React.JSX.Element {
   const checkToolsExist = async () => {
     const exist = await window.api.checkToolsExist()
     setToolsExist(exist)
-  }
-
-  const checkForUpdates = async () => {
-    try {
-      const result = await window.api.checkForUpdates()
-      // Only proceed if we're in production (result will be null in dev)
-      if (result && result.success) {
-        console.log('Update check completed')
-      }
-    } catch (error) {
-      console.error('Failed to check for updates:', error)
-    }
   }
 
   const loadAppVersion = async () => {
@@ -302,15 +296,44 @@ function AppContent(): React.JSX.Element {
     }
   }
 
-  const handleSkinClick = async (champion: Champion, skin: Skin, chromaId?: string) => {
+  const handleSkinClick = (champion: Champion, skin: Skin, chromaId?: string) => {
     if (!gamePath) {
       setStatusMessage('Please set game path first')
       return
     }
 
+    const existingIndex = selectedSkins.findIndex(
+      (s) =>
+        s.championKey === champion.key &&
+        s.skinId === skin.id &&
+        s.chromaId === (chromaId || undefined)
+    )
+
+    if (existingIndex >= 0) {
+      // Remove from selection
+      setSelectedSkins((prev) => prev.filter((_, index) => index !== existingIndex))
+    } else {
+      // Add to selection
+      const newSelectedSkin: SelectedSkin = {
+        championKey: champion.key,
+        championName: champion.name,
+        skinId: skin.id,
+        skinName: skin.name,
+        skinNameEn: skin.nameEn,
+        skinNum: skin.num,
+        chromaId: chromaId,
+        isDownloaded: false // Will be checked when applying
+      }
+      setSelectedSkins((prev) => [...prev, newSelectedSkin])
+    }
+  }
+
+  const applySelectedSkins = async () => {
+    if (!gamePath || selectedSkins.length === 0) {
+      return
+    }
+
     setLoading(true)
-    setSelectedSkinId(skin.id)
-    setSelectedChromaId(chromaId || null)
 
     try {
       // Stop patcher if running
@@ -320,68 +343,78 @@ function AppContent(): React.JSX.Element {
         await new Promise((resolve) => setTimeout(resolve, 500)) // Small delay
       }
 
-      // Check if skin/chroma is already downloaded
-      let skinFileName: string
-      let githubUrl: string
-      const downloadName = (skin.nameEn || skin.name).replace(/:/g, '') // Use English name for download and remove colons
+      const skinKeys: string[] = []
 
-      if (chromaId) {
-        // Handle chroma
-        skinFileName = `${downloadName} ${chromaId}.zip`
-        const isChromaDownloaded = downloadedSkins.some(
-          (ds) => ds.championName === champion.key && ds.skinName === skinFileName
-        )
+      // Download any skins that aren't downloaded yet
+      for (const selectedSkin of selectedSkins) {
+        const champion = championData?.champions.find((c) => c.key === selectedSkin.championKey)
+        if (!champion) continue
 
-        if (!isChromaDownloaded) {
-          githubUrl = `https://github.com/darkseal-org/lol-skins/blob/main/skins/${champion.key}/chromas/${encodeURIComponent(downloadName)}/${encodeURIComponent(skinFileName)}`
+        const skin = champion.skins.find((s) => s.id === selectedSkin.skinId)
+        if (!skin) continue
 
-          setStatusMessage(t('status.downloading', { name: `${skin.name} (Chroma)` }))
+        let skinFileName: string
+        let githubUrl: string
+        // Always use the English name from the actual skin data, not the stored one
+        const downloadName = (skin.nameEn || skin.name).replace(/:/g, '')
 
-          const downloadResult = await window.api.downloadSkin(githubUrl)
-          if (!downloadResult.success) {
-            throw new Error(downloadResult.error || 'Failed to download chroma')
+        if (selectedSkin.chromaId) {
+          // Handle chroma
+          skinFileName = `${downloadName} ${selectedSkin.chromaId}.zip`
+          const isChromaDownloaded = downloadedSkins.some(
+            (ds) => ds.championName === champion.key && ds.skinName === skinFileName
+          )
+
+          if (!isChromaDownloaded) {
+            githubUrl = `https://github.com/darkseal-org/lol-skins/blob/main/skins/${champion.key}/chromas/${encodeURIComponent(downloadName)}/${encodeURIComponent(skinFileName)}`
+
+            setStatusMessage(t('status.downloading', { name: `${skin.name} (Chroma)` }))
+
+            const downloadResult = await window.api.downloadSkin(githubUrl)
+            if (!downloadResult.success) {
+              throw new Error(downloadResult.error || 'Failed to download chroma')
+            }
           }
+        } else {
+          // Handle regular skin
+          skinFileName = `${downloadName}.zip`
+          const isSkinDownloaded = downloadedSkins.some(
+            (ds) => ds.championName === champion.key && ds.skinName === skinFileName
+          )
 
-          await loadDownloadedSkins()
-        }
-      } else {
-        // Handle regular skin
-        skinFileName = `${downloadName}.zip`
-        const isSkinDownloaded = downloadedSkins.some(
-          (ds) => ds.championName === champion.key && ds.skinName === skinFileName
-        )
+          if (!isSkinDownloaded) {
+            githubUrl = `https://github.com/darkseal-org/lol-skins/blob/main/skins/${champion.key}/${encodeURIComponent(skinFileName)}`
 
-        if (!isSkinDownloaded) {
-          githubUrl = `https://github.com/darkseal-org/lol-skins/blob/main/skins/${champion.key}/${encodeURIComponent(skinFileName)}`
+            setStatusMessage(t('status.downloading', { name: skin.name }))
 
-          setStatusMessage(t('status.downloading', { name: skin.name }))
-
-          const downloadResult = await window.api.downloadSkin(githubUrl)
-          if (!downloadResult.success) {
-            throw new Error(downloadResult.error || 'Failed to download skin')
+            const downloadResult = await window.api.downloadSkin(githubUrl)
+            if (!downloadResult.success) {
+              throw new Error(downloadResult.error || 'Failed to download skin')
+            }
           }
-
-          await loadDownloadedSkins()
         }
+
+        // Add skin key for the patcher
+        skinKeys.push(`${champion.key}/${skinFileName}`)
       }
 
-      // Generate skin key for the patcher
-      const skinKey = `${champion.key}/${skinFileName}`
+      // Reload downloaded skins list
+      await loadDownloadedSkins()
 
-      setStatusMessage(t('status.applying', { name: skin.name }))
+      setStatusMessage(t('status.applying', { name: `${selectedSkins.length} skins` }))
 
-      // Run patcher with the selected skin
-      const patcherResult = await window.api.runPatcher(gamePath, [skinKey])
+      // Run patcher with all selected skins
+      const patcherResult = await window.api.runPatcher(gamePath, skinKeys)
       if (patcherResult.success) {
-        setStatusMessage(t('status.applied', { name: skin.name }))
+        setStatusMessage(t('status.applied', { name: `${selectedSkins.length} skins` }))
         setIsPatcherRunning(true)
+        // Optionally clear selection after successful application
+        // setSelectedSkins([])
       } else {
-        throw new Error(patcherResult.message || 'Failed to apply skin')
+        throw new Error(patcherResult.message || 'Failed to apply skins')
       }
     } catch (error) {
       setStatusMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      setSelectedSkinId(null)
-      // setSelectedChromaId(null)
     }
 
     setLoading(false)
@@ -395,7 +428,7 @@ function AppContent(): React.JSX.Element {
     if (result.success) {
       setStatusMessage('Patcher stopped')
       setIsPatcherRunning(false)
-      setSelectedSkinId(null)
+      // setSelectedSkinId(null)
       // setSelectedChromaId(null)
     }
 
@@ -409,12 +442,6 @@ function AppContent(): React.JSX.Element {
     ) || []
 
   const isSearchingGlobally = skinSearchQuery.trim().length > 0
-
-  // Get skin image URL
-  const getSkinImageUrl = (champion: Champion, skinNum: number) => {
-    const championKey = champion.key
-    return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${championKey}_${skinNum}.jpg`
-  }
 
   // Get all unique champion tags
   const getAllChampionTags = () => {
@@ -501,6 +528,17 @@ function AppContent(): React.JSX.Element {
             allSkins.push({ champion: selectedChampion, skin })
           }
         }
+      })
+    } else if (selectedChampionKey === 'all') {
+      // All champions skins
+      championData.champions.forEach((champion) => {
+        champion.skins.forEach((skin) => {
+          if (skin.num !== 0) {
+            if (!showFavoritesOnly || favorites.has(`${champion.key}_${skin.id}`)) {
+              allSkins.push({ champion, skin })
+            }
+          }
+        })
       })
     }
 
@@ -638,15 +676,6 @@ function AppContent(): React.JSX.Element {
                 {t('champion.updateData')}
               </button>
             )}
-            {isPatcherRunning && (
-              <button
-                className="px-4 py-2.5 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-all duration-200 shadow-soft hover:shadow-medium disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-                onClick={stopPatcher}
-                disabled={loading}
-              >
-                {t('actions.stop')} Patcher
-              </button>
-            )}
           </div>
         </div>
 
@@ -662,42 +691,22 @@ function AppContent(): React.JSX.Element {
                   className="w-full px-4 py-2.5 text-sm bg-cream-50 dark:bg-charcoal-800 border border-charcoal-200 dark:border-charcoal-700 rounded-lg text-charcoal-700 dark:text-charcoal-200 placeholder-charcoal-400 dark:placeholder-charcoal-500 focus:outline-none focus:ring-2 focus:ring-terracotta-500 focus:border-transparent transition-all duration-200"
                 />
               </div>
-              <div className="flex-1 overflow-y-auto">
-                {filteredChampions.map((champion, index) => {
-                  const showLetter =
-                    index === 0 ||
-                    filteredChampions[index - 1].name[0].toUpperCase() !==
-                      champion.name[0].toUpperCase()
-
-                  return (
-                    <div key={champion.key}>
-                      {showLetter && (
-                        <div className="px-6 py-3 text-xs font-bold text-charcoal-700 dark:text-charcoal-400 uppercase tracking-wider">
-                          {champion.name[0].toUpperCase()}
-                        </div>
-                      )}
-                      <div
-                        className={`flex items-center gap-3 px-6 py-3 cursor-pointer transition-all duration-200 mx-3 my-1 rounded-lg border-2
-                          ${
-                            selectedChampion?.key === champion.key
-                              ? 'bg-terracotta-500 text-white shadow-md dark:shadow-dark-soft border-terracotta-600 scale-[1.02]'
-                              : 'hover:bg-cream-100 dark:hover:bg-charcoal-800 text-charcoal-800 dark:text-charcoal-200 border-transparent hover:border-charcoal-200 dark:hover:border-charcoal-700'
-                          }`}
-                        onClick={() => {
-                          setSelectedChampion(champion)
-                          setSelectedChampionKey(champion.key)
-                        }}
-                      >
-                        <img
-                          src={champion.image}
-                          alt={champion.name}
-                          className="w-10 h-10 rounded-lg"
-                        />
-                        <span className="text-sm font-medium">{champion.name}</span>
-                      </div>
-                    </div>
-                  )
-                })}
+              <div className="flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+                <AutoSizer>
+                  {({ width, height }) => (
+                    <VirtualizedChampionList
+                      champions={filteredChampions}
+                      selectedChampion={selectedChampion}
+                      selectedChampionKey={selectedChampionKey}
+                      onChampionSelect={(champion, key) => {
+                        setSelectedChampion(champion)
+                        setSelectedChampionKey(key)
+                      }}
+                      height={height}
+                      width={width}
+                    />
+                  )}
+                </AutoSizer>
               </div>
               {championData && (
                 <div className="px-6 py-4 text-xs text-charcoal-500 dark:text-charcoal-500 border-t-2 border-charcoal-200 dark:border-charcoal-800 bg-cream-100 dark:bg-charcoal-950">
@@ -725,167 +734,31 @@ function AppContent(): React.JSX.Element {
                 />
                 <GridViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
               </div>
-              {(selectedChampion || isSearchingGlobally) && (
-                <div className="flex-1 overflow-y-auto px-8 pb-8">
+              {(selectedChampion || isSearchingGlobally || selectedChampionKey === 'all') && (
+                <div className="flex-1 overflow-hidden flex flex-col">
                   {getDisplaySkins().length > 0 ? (
                     <>
-                      <div className="mb-4 text-sm text-charcoal-600 dark:text-charcoal-400">
+                      <div className="px-8 pb-4 text-sm text-charcoal-600 dark:text-charcoal-400">
                         Showing {getDisplaySkins().length} skin
                         {getDisplaySkins().length !== 1 ? 's' : ''}
                       </div>
-                      <div
-                        className={`
-                    ${
-                      viewMode === 'list'
-                        ? 'space-y-2'
-                        : `grid gap-6 ${
-                            viewMode === 'compact'
-                              ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10'
-                              : viewMode === 'comfortable'
-                                ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'
-                                : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
-                          }`
-                    }
-                  `}
-                      >
-                        {getDisplaySkins().map(({ champion, skin }) => {
-                          const skinFileName = `${skin.nameEn || skin.name}.zip`.replace(/:/g, '')
-                          const isDownloaded = downloadedSkins.some(
-                            (ds) => ds.championName === champion.key && ds.skinName === skinFileName
-                          )
-                          const isFavorite = favorites.has(`${champion.key}_${skin.id}`)
-
-                          // List view
-                          if (viewMode === 'list') {
-                            return (
-                              <div
-                                key={`${champion.key}_${skin.id}`}
-                                className={`flex items-center gap-4 p-3 bg-white dark:bg-charcoal-800 rounded-lg transition-all duration-200 cursor-pointer border
-                              ${
-                                selectedSkinId === skin.id && !selectedChromaId
-                                  ? 'border-terracotta-500 bg-terracotta-50 dark:bg-terracotta-950/20'
-                                  : 'border-charcoal-200 dark:border-charcoal-700 hover:border-charcoal-300 dark:hover:border-charcoal-600 hover:shadow-md dark:hover:shadow-dark-soft'
-                              }`}
-                                onClick={() => !loading && handleSkinClick(champion, skin)}
-                              >
-                                <img
-                                  src={getSkinImageUrl(champion, skin.num)}
-                                  alt={skin.name}
-                                  className="w-16 h-16 object-cover rounded"
-                                />
-                                <div className="flex-1">
-                                  <p className="font-medium text-charcoal-900 dark:text-charcoal-100">
-                                    {skin.name}
-                                  </p>
-                                  <p className="text-sm text-charcoal-600 dark:text-charcoal-400">
-                                    {champion.name}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {skin.chromas && (
-                                    <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded">
-                                      Chromas
-                                    </span>
-                                  )}
-                                  {isDownloaded && (
-                                    <span className="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
-                                      <span className="text-white text-xs">↓</span>
-                                    </span>
-                                  )}
-                                  <button
-                                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all
-                                  ${
-                                    isFavorite
-                                      ? 'bg-red-100 dark:bg-red-900/30 text-red-500'
-                                      : 'bg-charcoal-100 dark:bg-charcoal-700 text-charcoal-400 hover:text-charcoal-600 dark:hover:text-charcoal-300'
-                                  }`}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      toggleFavorite(champion, skin)
-                                    }}
-                                  >
-                                    {isFavorite ? '❤️' : '🤍'}
-                                  </button>
-                                </div>
-                              </div>
-                            )
-                          }
-
-                          // Card views
-                          return (
-                            <div
-                              key={`${champion.key}_${skin.id}`}
-                              className={`group relative bg-cream-50 dark:bg-charcoal-800 rounded-xl overflow-hidden transform transition-all duration-300 ease-out border border-charcoal-200 dark:border-charcoal-700
-                            ${
-                              selectedSkinId === skin.id && !selectedChromaId
-                                ? 'ring-2 ring-terracotta-500 shadow-xl dark:shadow-dark-large scale-[1.02] border-terracotta-500'
-                                : 'hover:shadow-xl dark:hover:shadow-dark-large shadow-md dark:shadow-dark-soft hover:-translate-y-1 hover:scale-[1.02] hover:border-charcoal-300 dark:hover:border-charcoal-600'
-                            } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                          `}
-                            >
-                              <div className="relative aspect-[0.67] overflow-hidden bg-charcoal-100 dark:bg-charcoal-900">
-                                <img
-                                  src={getSkinImageUrl(champion, skin.num)}
-                                  alt={skin.name}
-                                  className="w-full h-full object-cover"
-                                  onClick={() => !loading && handleSkinClick(champion, skin)}
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
-                                <div className="absolute top-2 left-2 px-2 py-1 bg-black bg-opacity-75 backdrop-blur-sm rounded-lg text-xs text-white font-medium transform transition-all duration-300 group-hover:scale-105">
-                                  {champion.name}
-                                </div>
-                                {selectedSkinId === skin.id && !selectedChromaId && (
-                                  <div className="absolute inset-0 bg-terracotta-500 bg-opacity-10 flex items-center justify-center">
-                                    <div className="w-12 h-12 bg-terracotta-500 rounded-full flex items-center justify-center text-white text-xl font-bold shadow-lg">
-                                      ✓
-                                    </div>
-                                  </div>
-                                )}
-                                {isDownloaded && selectedSkinId !== skin.id && (
-                                  <div
-                                    className="absolute bottom-2 right-2 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center shadow-soft transform transition-all duration-300 group-hover:scale-110"
-                                    title="Downloaded"
-                                  >
-                                    <span className="text-white text-xs">↓</span>
-                                  </div>
-                                )}
-                                <button
-                                  className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center transition-all
-                                      ${
-                                        isFavorite
-                                          ? 'bg-white/10 backdrop-blur-sm text-red-500'
-                                          : 'bg-white/10 backdrop-blur-sm text-white/70 hover:text-white hover:bg-white/20'
-                                      }`}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    toggleFavorite(champion, skin)
-                                  }}
-                                  title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                                >
-                                  {isFavorite ? '❤️' : '🤍'}
-                                </button>
-                              </div>
-                              <div
-                                className={`${viewMode === 'spacious' ? 'p-4' : viewMode === 'comfortable' ? 'p-3' : 'p-2'} bg-white dark:bg-charcoal-800`}
-                              >
-                                <p
-                                  className={`${viewMode === 'spacious' ? 'text-base' : viewMode === 'comfortable' ? 'text-sm' : 'text-xs'} font-semibold text-charcoal-900 dark:text-charcoal-100 truncate`}
-                                >
-                                  {skin.name}
-                                </p>
-                                {viewMode === 'spacious' && (
-                                  <div className="mt-2 flex items-center gap-2">
-                                    {skin.chromas && (
-                                      <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded">
-                                        Chromas
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
+                      <div className="flex-1 relative" style={{ minHeight: 0 }}>
+                        <AutoSizer>
+                          {({ width, height }) => (
+                            <VirtualizedSkinGrid
+                              skins={getDisplaySkins()}
+                              viewMode={viewMode}
+                              downloadedSkins={downloadedSkins}
+                              selectedSkins={selectedSkins}
+                              favorites={favorites}
+                              loading={loading}
+                              onSkinClick={handleSkinClick}
+                              onToggleFavorite={toggleFavorite}
+                              containerWidth={width}
+                              containerHeight={height}
+                            />
+                          )}
+                        </AutoSizer>
                       </div>
                     </>
                   ) : (
@@ -954,27 +827,39 @@ function AppContent(): React.JSX.Element {
           </div>
         )}
 
-        <div className="border-t-2 border-charcoal-200 dark:border-charcoal-800 bg-white dark:bg-charcoal-900 px-8 py-4 shadow-md dark:shadow-none">
-          <div className="text-sm text-charcoal-800 dark:text-charcoal-300 font-medium flex items-center gap-3">
-            {loading && (
-              <div className="flex items-center gap-1.5">
-                <div
-                  className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
-                  style={{ animationDelay: '0ms' }}
-                ></div>
-                <div
-                  className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
-                  style={{ animationDelay: '150ms' }}
-                ></div>
-                <div
-                  className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
-                  style={{ animationDelay: '300ms' }}
-                ></div>
-              </div>
-            )}
-            {statusMessage || t('app.ready')}
+        {selectedSkins.length > 0 && championData ? (
+          <SelectedSkinsDrawer
+            onApplySkins={applySelectedSkins}
+            onStopPatcher={stopPatcher}
+            loading={loading}
+            isPatcherRunning={isPatcherRunning}
+            downloadedSkins={downloadedSkins}
+            championData={championData}
+            statusMessage={statusMessage}
+          />
+        ) : (
+          <div className="border-t-2 border-charcoal-200 dark:border-charcoal-800 bg-white dark:bg-charcoal-900 px-8 py-4 shadow-md dark:shadow-none">
+            <div className="text-sm text-charcoal-800 dark:text-charcoal-300 font-medium flex items-center gap-3">
+              {loading && (
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
+                    style={{ animationDelay: '0ms' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
+                    style={{ animationDelay: '150ms' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-terracotta-500 rounded-full animate-bounce"
+                    style={{ animationDelay: '300ms' }}
+                  ></div>
+                </div>
+              )}
+              {statusMessage || t('app.ready')}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </>
   )

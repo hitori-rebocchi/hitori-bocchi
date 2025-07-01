@@ -80,6 +80,7 @@ module.exports = {
         dots: 'dots 1.5s steps(5, end) infinite',
         'fade-in': 'fadeIn 0.2s ease-out',
         'slide-down': 'slideDown 0.2s ease-out',
+        'slide-up': 'slideUp 0.3s ease-out',
         progress: 'progress 2s ease-in-out infinite',
         'card-hover': 'cardHover 0.3s ease-out forwards',
         'scale-in': 'scaleIn 0.2s ease-out'
@@ -111,6 +112,16 @@ module.exports = {
           from: {
             opacity: '0',
             transform: 'translateY(-10px)'
+          },
+          to: {
+            opacity: '1',
+            transform: 'translateY(0)'
+          }
+        },
+        slideUp: {
+          from: {
+            opacity: '0',
+            transform: 'translateY(20px)'
           },
           to: {
             opacity: '1',

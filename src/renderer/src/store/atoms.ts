@@ -21,6 +21,20 @@ export const showFavoritesOnlyAtom = atomWithStorage<boolean>('cslol-show-favori
 export const championSearchQueryAtom = atom<string>('')
 export const skinSearchQueryAtom = atom<string>('')
 
+// Selected skins for batch processing
+export interface SelectedSkin {
+  championKey: string
+  championName: string
+  skinId: string
+  skinName: string
+  skinNameEn?: string
+  skinNum: number
+  chromaId?: string
+  isDownloaded?: boolean
+}
+
+export const selectedSkinsAtom = atomWithStorage<SelectedSkin[]>('cslol-selected-skins', [])
+
 // UI state atoms
 export const selectedChampionKeyAtom = atomWithStorage<string | null>(
   'cslol-selected-champion',
@@ -28,5 +42,9 @@ export const selectedChampionKeyAtom = atomWithStorage<string | null>(
 )
 export const filterPanelExpandedAtom = atomWithStorage<boolean>(
   'cslol-filter-panel-expanded',
+  false
+)
+export const selectedSkinsDrawerExpandedAtom = atomWithStorage<boolean>(
+  'cslol-selected-skins-drawer-expanded',
   false
 )

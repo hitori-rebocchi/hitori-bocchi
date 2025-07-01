@@ -73,6 +73,11 @@ export interface IApi {
 
   // App info
   getAppVersion: () => Promise<string>
+
+  // Patcher events
+  onPatcherStatus: (callback: (status: string) => void) => void
+  onPatcherMessage: (callback: (message: string) => void) => void
+  onPatcherError: (callback: (error: string) => void) => void
 }
 
 declare global {

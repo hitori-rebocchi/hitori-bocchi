@@ -42,6 +42,15 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
     updaterService.setMainWindow(mainWindow)
+    modToolsWrapper.setMainWindow(mainWindow)
+
+    // Check for updates after window is ready
+    // Only in production mode
+    if (!is.dev) {
+      setTimeout(() => {
+        updaterService.checkForUpdates()
+      }, 3000) // Delay 3 seconds to let the app fully load
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

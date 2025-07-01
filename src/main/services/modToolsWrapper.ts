@@ -1,7 +1,7 @@
 import { spawn, ChildProcess } from 'child_process'
 import path from 'path'
 import fs from 'fs/promises'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { Preset } from '../types'
 import { ToolsDownloader } from './toolsDownloader'
 
@@ -9,6 +9,7 @@ export class ModToolsWrapper {
   private modToolsPath: string
   private profilesPath: string
   private runningProcess: ChildProcess | null = null
+  private mainWindow: BrowserWindow | null = null
 
   constructor() {
     // Get mod-tools path from ToolsDownloader
@@ -18,6 +19,10 @@ export class ModToolsWrapper {
 
     const userData = app.getPath('userData')
     this.profilesPath = path.join(userData, 'profiles')
+  }
+
+  setMainWindow(window: BrowserWindow) {
+    this.mainWindow = window
   }
 
   async checkModToolsExist(): Promise<boolean> {
@@ -94,16 +99,48 @@ export class ModToolsWrapper {
       )
 
       this.runningProcess.stdout?.on('data', (data) => {
-        console.log(`[MOD-TOOLS]: ${data.toString()}`)
+        const output = data.toString().trim()
+        console.log(`[MOD-TOOLS]: ${output}`)
+
+        // Parse and send status messages to renderer
+        if (output.startsWith('Status: ')) {
+          const status = output.substring(8)
+          console.log(`[MOD-TOOLS IPC] Sending patcher-status: ${status}`)
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('patcher-status', status)
+          } else {
+            console.error('[MOD-TOOLS IPC] No main window available to send status')
+          }
+        } else if (output.startsWith('[DLL] ')) {
+          const message = output.substring(6)
+          console.log(`[MOD-TOOLS IPC] Sending patcher-message: ${message}`)
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('patcher-message', message)
+          } else {
+            console.error('[MOD-TOOLS IPC] No main window available to send message')
+          }
+        }
       })
 
       this.runningProcess.stderr?.on('data', (data) => {
-        console.error(`[MOD-TOOLS ERROR]: ${data.toString()}`)
+        const error = data.toString().trim()
+        console.error(`[MOD-TOOLS ERROR]: ${error}`)
+        console.log(`[MOD-TOOLS IPC] Sending patcher-error: ${error}`)
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('patcher-error', error)
+        } else {
+          console.error('[MOD-TOOLS IPC] No main window available to send error')
+        }
       })
 
       this.runningProcess.on('exit', (code) => {
         console.log(`Mod tools process exited with code ${code}`)
         this.runningProcess = null
+
+        // Send a clear status message when patcher exits
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('patcher-status', '')
+        }
       })
 
       return { success: true, message: 'Preset applied successfully' }

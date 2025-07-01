@@ -78,7 +78,30 @@ const api = {
   },
 
   // App info
-  getAppVersion: () => ipcRenderer.invoke('get-app-version')
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
+  // Patcher events
+  onPatcherStatus: (callback: (status: string) => void) => {
+    console.log('[Preload] Registering patcher-status listener')
+    ipcRenderer.on('patcher-status', (_, status) => {
+      console.log('[Preload] Received patcher-status:', status)
+      callback(status)
+    })
+  },
+  onPatcherMessage: (callback: (message: string) => void) => {
+    console.log('[Preload] Registering patcher-message listener')
+    ipcRenderer.on('patcher-message', (_, message) => {
+      console.log('[Preload] Received patcher-message:', message)
+      callback(message)
+    })
+  },
+  onPatcherError: (callback: (error: string) => void) => {
+    console.log('[Preload] Registering patcher-error listener')
+    ipcRenderer.on('patcher-error', (_, error) => {
+      console.log('[Preload] Received patcher-error:', error)
+      callback(error)
+    })
+  }
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
