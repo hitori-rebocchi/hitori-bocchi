@@ -1,29 +1,28 @@
 # Bocchi Changelog
 
-## Version 1.0.0
+## Version 1.1.0
 
-### 🎉 Initial Release
+### ✨ What's New
 
-#### Features
+#### Smaller Download Size
 
-- **Skin Browser**: Browse and manage League of Legends skins
-- **Grid Views**: Multiple view modes (Compact, Comfortable, Spacious, List)
-- **Advanced Filtering**: Filter by download status, chromas, champion tags
-- **Sorting Options**: Sort by name or download status
-- **Dark Mode**: Full dark mode support with theme toggle
-- **Multi-language**: Support for multiple languages
-- **Auto-updater**: Automatic updates from GitHub releases
-- **Favorites**: Mark your favorite skins for quick access
-- **Search**: Global skin search and champion-specific search
-- **State Persistence**: Remembers your filters and view preferences
+- **Bocchi is now much smaller to download!**
+  - We moved champion information to the cloud
+  - The app downloads what it needs when you open it
+  - You save storage space on your computer
 
-#### Technical
+#### Better Performance
 
-- Built with Electron + React + TypeScript
-- Uses cslol-tools for skin management
-- Modern UI with Tailwind CSS
-- State management with Jotai
+- **Bocchi runs faster**
+  - Information loads quicker
+  - Uses less of your computer's resources
+  - Smoother experience overall
 
----
+### 🛠️ Behind the Scenes
 
-\_Made with ❤️ by hoangvu12
+For those interested in the technical details:
+
+- Champion data now comes from our GitHub CDN
+- Improved code quality with TypeScript
+- Added automated data update system
+- Open-source MIT license
