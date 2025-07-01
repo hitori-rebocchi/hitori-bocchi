@@ -1,7 +1,7 @@
 # Bocchi - League of Legends Skin Manager
 
 <div align="center">
-  <img src="./resources/icon.png" alt="Bocchi Logo" width="128" height="128">
+  <img src="./build/logo.png" alt="Bocchi Logo" width="128" height="128">
   
   [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
   [![Platform](https://img.shields.io/badge/platform-Windows-brightgreen.svg)](https://github.com/hoangvu12/bocchi/releases)
@@ -25,16 +25,7 @@ Bocchi is a modern, user-friendly desktop application for changing League of Leg
 
 ## 📸 Screenshots
 
-<!-- Add screenshots here -->
-<details>
-<summary>Click to view screenshots</summary>
-
-### Main Interface
-
 ![Main Interface](./screenshots/main-interface.png)
-_Browse and search for skins with an intuitive interface_
-
-</details>
 
 ## 🚀 Installation
 
