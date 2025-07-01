@@ -37,8 +37,8 @@ jobs:
           # Create or switch to champion-data branch
           git checkout -B champion-data
 
-          # Add the fetched data
-          git add data/
+          # Force add the fetched data (since it's in .gitignore)
+          git add -f data/
 
           # Commit if there are changes
           if ! git diff --cached --quiet; then
