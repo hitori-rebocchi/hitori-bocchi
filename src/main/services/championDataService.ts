@@ -1,7 +1,4 @@
 import axios from 'axios'
-import fs from 'fs/promises'
-import path from 'path'
-import { app } from 'electron'
 
 interface Champion {
   id: number
@@ -22,13 +19,13 @@ interface Skin {
 }
 
 export class ChampionDataService {
-  private dataPath: string
   private apiVersion: string = ''
   private supportedLanguages = ['en_US', 'vi_VN']
+  private githubDataUrl = 'https://raw.githubusercontent.com/nguyenvu/bocchi/champion-data/data'
+  private cachedData: Map<string, { version: string; champions: Champion[] }> = new Map()
 
   constructor() {
-    const userData = app.getPath('userData')
-    this.dataPath = path.join(userData, 'champion-data')
+    console.log('ChampionDataService constructor')
   }
 
   private async getApiVersion(): Promise<string> {
@@ -42,14 +39,63 @@ export class ChampionDataService {
     return response.data.data[champId]
   }
 
-  private getDataPath(language: string): string {
-    return `${this.dataPath}-${language}.json`
-  }
-
   public async fetchAndSaveChampionData(
     language: string = 'en_US'
   ): Promise<{ success: boolean; message: string; championCount?: number }> {
     try {
+      // Try to fetch from GitHub first
+      const githubUrl = `${this.githubDataUrl}/champion-data-${language}.json`
+
+      try {
+        const response = await axios.get(githubUrl)
+        const data = response.data
+
+        // If non-English, also fetch English data to add English skin names
+        if (language !== 'en_US') {
+          try {
+            const englishUrl = `${this.githubDataUrl}/champion-data-en_US.json`
+            const englishResponse = await axios.get(englishUrl)
+            const englishData = englishResponse.data
+
+            // Create a map of English skin names
+            const englishSkinNames: Record<string, string> = {}
+            englishData.champions.forEach((champion: Champion) => {
+              champion.skins.forEach((skin: Skin) => {
+                englishSkinNames[skin.id] = skin.name
+              })
+            })
+
+            // Add English names to non-English skins
+            data.champions.forEach((champion: Champion) => {
+              champion.skins.forEach((skin: Skin) => {
+                const englishName = englishSkinNames[skin.id]
+                if (englishName) {
+                  skin.nameEn = englishName
+                }
+              })
+            })
+          } catch (error) {
+            console.error('Failed to fetch English skin names from CDN:', error)
+          }
+        }
+
+        // Cache the data in memory
+        this.cachedData.set(language, data)
+
+        // Update apiVersion for consistency
+        this.apiVersion = data.version
+
+        return {
+          success: true,
+          message: `Successfully fetched data for ${data.champions.length} champions from GitHub`,
+          championCount: data.champions.length
+        }
+      } catch (githubError) {
+        console.log('Failed to fetch from GitHub, falling back to Riot API:', githubError)
+        // Fall back to original implementation if GitHub fetch fails
+      }
+
+      // Original implementation as fallback
       // Get latest API version
       this.apiVersion = await this.getApiVersion()
 
@@ -106,18 +152,18 @@ export class ChampionDataService {
       // Sort champions by name
       champions.sort((a, b) => a.name.localeCompare(b.name))
 
-      // Save to JSON file
+      // Cache the data in memory
       const data = {
         version: this.apiVersion,
         lastUpdated: new Date().toISOString(),
         champions
       }
 
-      await fs.writeFile(this.getDataPath(language), JSON.stringify(data, null, 2))
+      this.cachedData.set(language, data)
 
       return {
         success: true,
-        message: `Successfully fetched and saved data for ${champions.length} champions`,
+        message: `Successfully fetched data for ${champions.length} champions`,
         championCount: champions.length
       }
     } catch (error) {
@@ -132,25 +178,42 @@ export class ChampionDataService {
   public async loadChampionData(
     language: string = 'en_US'
   ): Promise<{ version: string; champions: Champion[] } | null> {
-    try {
-      const data = await fs.readFile(this.getDataPath(language), 'utf-8')
-      return JSON.parse(data)
-    } catch (error: any) {
-      // Don't log error for file not found - this is expected on first run
-      if (error.code !== 'ENOENT') {
-        console.error('Error loading champion data:', error)
-      }
-      return null
+    // Check if we have cached data
+    const cached = this.cachedData.get(language)
+    if (cached) {
+      return cached
     }
+
+    // If no cached data, fetch it
+    const result = await this.fetchAndSaveChampionData(language)
+    if (result.success) {
+      return this.cachedData.get(language) || null
+    }
+
+    return null
   }
 
   public async checkForUpdates(language: string = 'en_US'): Promise<boolean> {
     try {
-      const currentData = await this.loadChampionData(language)
+      const currentData = this.cachedData.get(language)
       if (!currentData) return true // No data, needs update
 
-      const latestVersion = await this.getApiVersion()
-      return currentData.version !== latestVersion
+      // Try to check GitHub version first
+      try {
+        const githubUrl = `${this.githubDataUrl}/champion-data-${language}.json`
+        const response = await axios.get(githubUrl, {
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        })
+        const githubData = response.data
+        return currentData.version !== githubData.version
+      } catch {
+        // Fall back to checking Riot API version
+        console.log('Failed to check GitHub version, falling back to Riot API')
+        const latestVersion = await this.getApiVersion()
+        return currentData.version !== latestVersion
+      }
     } catch (error) {
       console.error('Error checking for updates:', error)
       return true // On error, assume update needed

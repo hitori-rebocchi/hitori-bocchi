@@ -1,0 +1,49 @@
+name: Fetch Champion Data
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Fetch champion data
+        run: bun run scripts/fetch-champion-data.ts
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push to champion-data branch
+        run: |
+          # Create or switch to champion-data branch
+          git checkout -B champion-data
+
+          # Add the fetched data
+          git add data/
+
+          # Commit if there are changes
+          if ! git diff --cached --quiet; then
+            git commit -m "Update champion data - $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            git push origin champion-data --force
+          else
+            echo "No changes to champion data"
+          fi
