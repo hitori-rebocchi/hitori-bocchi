@@ -104,8 +104,32 @@ export function UpdateDialog({ isOpen, onClose }: UpdateDialogProps) {
               <h3 className="text-sm font-semibold text-charcoal-700 dark:text-charcoal-300 mb-3">
                 What&apos;s New
               </h3>
-              <div className="bg-charcoal-50 dark:bg-charcoal-800 rounded p-4 prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown>{changelog}</ReactMarkdown>
+              <div className="bg-charcoal-50 dark:bg-charcoal-800 rounded p-4 max-h-96 overflow-y-auto">
+                <div
+                  className="prose prose-sm dark:prose-invert max-w-none 
+                  prose-headings:text-charcoal-900 dark:prose-headings:text-charcoal-100
+                  prose-h1:text-2xl prose-h1:mb-4
+                  prose-h2:text-xl prose-h2:mb-3 prose-h2:mt-6
+                  prose-h3:text-lg prose-h3:mb-2 prose-h3:mt-4
+                  prose-h4:text-base prose-h4:mb-2 prose-h4:mt-3
+                  prose-p:text-charcoal-700 dark:prose-p:text-charcoal-300
+                  prose-p:mb-3 prose-p:leading-relaxed
+                  prose-ul:my-3 prose-ul:space-y-2
+                  prose-li:text-charcoal-700 dark:prose-li:text-charcoal-300
+                  prose-li:marker:text-terracotta-500 dark:prose-li:marker:text-terracotta-400
+                  prose-strong:text-charcoal-900 dark:prose-strong:text-charcoal-100
+                  prose-strong:font-semibold
+                  prose-code:text-terracotta-600 dark:prose-code:text-terracotta-400
+                  prose-code:bg-charcoal-100 dark:prose-code:bg-charcoal-900
+                  prose-code:px-1 prose-code:py-0.5 prose-code:rounded
+                  prose-code:before:content-[''] prose-code:after:content-['']
+                  prose-pre:bg-charcoal-900 dark:prose-pre:bg-charcoal-950
+                  prose-pre:text-charcoal-100
+                  prose-a:text-terracotta-600 dark:prose-a:text-terracotta-400
+                  prose-a:no-underline hover:prose-a:underline"
+                >
+                  <ReactMarkdown>{changelog}</ReactMarkdown>
+                </div>
               </div>
             </div>
           )}
