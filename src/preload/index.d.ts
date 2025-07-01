@@ -62,6 +62,7 @@ export interface IApi {
   checkForUpdates: () => Promise<{ success: boolean; updateInfo?: any; error?: string }>
   downloadUpdate: () => Promise<{ success: boolean; error?: string }>
   quitAndInstall: () => void
+  cancelUpdate: () => Promise<{ success: boolean }>
   getUpdateChangelog: () => Promise<{ success: boolean; changelog?: string | null; error?: string }>
   getUpdateInfo: () => Promise<any>
   onUpdateChecking: (callback: () => void) => void

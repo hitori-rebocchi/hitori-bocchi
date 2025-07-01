@@ -349,6 +349,11 @@ function setupIpcHandlers(): void {
     updaterService.quitAndInstall()
   })
 
+  ipcMain.handle('cancel-update', () => {
+    updaterService.cancelUpdate()
+    return { success: true }
+  })
+
   ipcMain.handle('get-update-changelog', async () => {
     try {
       const changelog = await updaterService.getChangelog()

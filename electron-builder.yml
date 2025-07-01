@@ -24,6 +24,9 @@ nsis:
   uninstallDisplayName: Bocchi - League of Legends Skin Manager
   createDesktopShortcut: always
   createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+  perMachine: false
+  allowElevation: true
 npmRebuild: false
 publish:
   provider: github

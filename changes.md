@@ -1,28 +1,32 @@
-# Bocchi Changelog
+# Version 1.1.1
 
-## Version 1.1.0
+## ✨ What's New
 
-### ✨ What's New
+### Seamless Auto-Updates
+- **Updates install automatically!**
+  - No more clicking "Install and Restart" after downloads
+  - The app restarts itself with the new version
+  - You can cancel downloads if you change your mind
 
-#### Smaller Download Size
+### Data Preservation
+- **Your settings are safe during updates**
+  - Favorites stay saved
+  - Settings remain intact
+  - No need to reinstall tools after updating
 
-- **Bocchi is now much smaller to download!**
-  - We moved champion information to the cloud
-  - The app downloads what it needs when you open it
-  - You save storage space on your computer
+### Better Update Dialog
+- **Clearer update process**
+  - Shows download progress
+  - Beautiful changelog display
+  - Cancel button when downloading
 
-#### Better Performance
+## 🐛 Bug Fixes
+- Fixed issue where favorites were lost after updates
+- Fixed issue requiring manual installation after download
+- Fixed cslol-tools needing reinstallation after updates
 
-- **Bocchi runs faster**
-  - Information loads quicker
-  - Uses less of your computer's resources
-  - Smoother experience overall
-
-### 🛠️ Behind the Scenes
-
+## 🛠️ Behind the Scenes
 For those interested in the technical details:
-
-- Champion data now comes from our GitHub CDN
-- Improved code quality with TypeScript
-- Added automated data update system
-- Open-source MIT license
+- Improved auto-updater with cancellation support
+- Better NSIS installer configuration
+- Tailwind Typography for better changelog formatting

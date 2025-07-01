@@ -56,6 +56,7 @@ const api = {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
+  cancelUpdate: () => ipcRenderer.invoke('cancel-update'),
   getUpdateChangelog: () => ipcRenderer.invoke('get-update-changelog'),
   getUpdateInfo: () => ipcRenderer.invoke('get-update-info'),
   onUpdateChecking: (callback: () => void) => {

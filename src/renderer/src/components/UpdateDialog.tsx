@@ -12,7 +12,6 @@ export function UpdateDialog({ isOpen, onClose }: UpdateDialogProps) {
   const [changelog, setChangelog] = useState<string | null>(null)
   const [downloadProgress, setDownloadProgress] = useState<number>(0)
   const [isDownloading, setIsDownloading] = useState(false)
-  const [isInstalling, setIsInstalling] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -29,14 +28,15 @@ export function UpdateDialog({ isOpen, onClose }: UpdateDialogProps) {
 
     window.api.onUpdateDownloaded(() => {
       setIsDownloading(false)
-      setIsInstalling(true)
+      // Update will auto-install, just close the dialog
+      onClose()
     })
 
     window.api.onUpdateError((error) => {
       setError(error)
       setIsDownloading(false)
     })
-  }, [])
+  }, [onClose])
 
   const loadUpdateInfo = async () => {
     try {
@@ -64,8 +64,12 @@ export function UpdateDialog({ isOpen, onClose }: UpdateDialogProps) {
     }
   }
 
-  const handleInstall = () => {
-    window.api.quitAndInstall()
+  const handleCancel = async () => {
+    if (isDownloading) {
+      await window.api.cancelUpdate()
+      setIsDownloading(false)
+    }
+    onClose()
   }
 
   if (!isOpen || !updateInfo) return null
@@ -80,7 +84,7 @@ export function UpdateDialog({ isOpen, onClose }: UpdateDialogProps) {
           <button
             onClick={onClose}
             className="p-1 rounded hover:bg-charcoal-100 dark:hover:bg-charcoal-800 transition-colors"
-            disabled={isDownloading || isInstalling}
+            disabled={isDownloading}
           >
             <X className="w-5 h-5 text-charcoal-500 dark:text-charcoal-400" />
           </button>
@@ -160,29 +164,19 @@ export function UpdateDialog({ isOpen, onClose }: UpdateDialogProps) {
 
         <div className="flex items-center justify-end gap-3 p-6 border-t border-charcoal-200 dark:border-charcoal-700">
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="px-4 py-2 text-sm font-medium text-charcoal-700 dark:text-charcoal-300 hover:bg-charcoal-100 dark:hover:bg-charcoal-800 rounded transition-colors"
-            disabled={isDownloading || isInstalling}
           >
-            Later
+            {isDownloading ? 'Cancel' : 'Later'}
           </button>
-          {!isInstalling ? (
-            <button
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed rounded transition-colors flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              {isDownloading ? 'Downloading...' : 'Download Update'}
-            </button>
-          ) : (
-            <button
-              onClick={handleInstall}
-              className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors"
-            >
-              Install and Restart
-            </button>
-          )}
+          <button
+            onClick={handleDownload}
+            disabled={isDownloading}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed rounded transition-colors flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            {isDownloading ? 'Downloading...' : 'Download and Install'}
+          </button>
         </div>
       </div>
     </div>
