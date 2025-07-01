@@ -10,6 +10,8 @@ import { FavoritesService } from './services/favoritesService'
 import { ToolsDownloader } from './services/toolsDownloader'
 import { SettingsService } from './services/settingsService'
 import { UpdaterService } from './services/updaterService'
+import { FileImportService } from './services/fileImportService'
+import { ImageService } from './services/imageService'
 
 // Initialize services
 const gameDetector = new GameDetector()
@@ -20,6 +22,8 @@ const favoritesService = new FavoritesService()
 const toolsDownloader = new ToolsDownloader()
 const settingsService = new SettingsService()
 const updaterService = new UpdaterService()
+const fileImportService = new FileImportService()
+const imageService = new ImageService()
 
 function createWindow(): void {
   // Create the browser window.
@@ -84,6 +88,7 @@ app.whenReady().then(async () => {
   // Initialize services
   await skinDownloader.initialize()
   await favoritesService.initialize()
+  await fileImportService.initialize()
 
   // Set up IPC handlers
   setupIpcHandlers()
@@ -157,6 +162,59 @@ function setupIpcHandlers(): void {
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
+  })
+
+  // File import handlers
+  ipcMain.handle('import-skin-file', async (_, filePath: string, options?: any) => {
+    try {
+      const result = await fileImportService.importFile(filePath, options)
+      return result
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle('validate-skin-file', async (_, filePath: string) => {
+    try {
+      const result = await fileImportService.validateFile(filePath)
+      return result
+    } catch (error) {
+      return { valid: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle('browse-skin-file', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      title: 'Select skin file',
+      buttonLabel: 'Select',
+      filters: [
+        { name: 'Skin Files', extensions: ['wad', 'zip', 'fantome'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, filePath: result.filePaths[0] }
+    }
+    return { success: false }
+  })
+
+  ipcMain.handle('browse-image-file', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      title: 'Select preview image (optional)',
+      buttonLabel: 'Select',
+      filters: [
+        { name: 'Image Files', extensions: ['jpg', 'jpeg', 'png', 'webp'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, filePath: result.filePaths[0] }
+    }
+    return { success: false }
   })
 
   // Patcher controls
@@ -370,5 +428,38 @@ function setupIpcHandlers(): void {
   // App info
   ipcMain.handle('get-app-version', () => {
     return app.getVersion()
+  })
+
+  // Custom skin images
+  ipcMain.handle('get-custom-skin-image', async (_, modPath: string) => {
+    try {
+      const imageUrl = await imageService.getCustomSkinImage(modPath)
+      return { success: true, imageUrl }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // Edit custom skin
+  ipcMain.handle(
+    'edit-custom-skin',
+    async (_, modPath: string, newName: string, newImagePath?: string) => {
+      try {
+        const result = await fileImportService.editCustomSkin(modPath, newName, newImagePath)
+        return result
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+      }
+    }
+  )
+
+  // Delete custom skin
+  ipcMain.handle('delete-custom-skin', async (_, modPath: string) => {
+    try {
+      const result = await fileImportService.deleteCustomSkin(modPath)
+      return result
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
   })
 }

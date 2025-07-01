@@ -10,6 +10,16 @@ export interface IApi {
     championName: string,
     skinName: string
   ) => Promise<{ success: boolean; error?: string }>
+
+  // File import
+  importSkinFile: (
+    filePath: string,
+    options?: { championName?: string; skinName?: string; imagePath?: string }
+  ) => Promise<{ success: boolean; skinInfo?: SkinInfo; error?: string }>
+  validateSkinFile: (filePath: string) => Promise<{ valid: boolean; error?: string }>
+  browseSkinFile: () => Promise<{ success: boolean; filePath?: string }>
+  browseImageFile: () => Promise<{ success: boolean; filePath?: string }>
+
   runPatcher: (
     gamePath: string,
     selectedSkins: string[]
@@ -74,6 +84,17 @@ export interface IApi {
 
   // App info
   getAppVersion: () => Promise<string>
+
+  // Custom skin images
+  getCustomSkinImage: (
+    modPath: string
+  ) => Promise<{ success: boolean; imageUrl?: string | null; error?: string }>
+  editCustomSkin: (
+    modPath: string,
+    newName: string,
+    newImagePath?: string
+  ) => Promise<{ success: boolean; error?: string }>
+  deleteCustomSkin: (modPath: string) => Promise<{ success: boolean; error?: string }>
 
   // Patcher events
   onPatcherStatus: (callback: (status: string) => void) => () => void

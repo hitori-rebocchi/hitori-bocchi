@@ -68,5 +68,27 @@
     "downloadFailed": "Failed to download",
     "connectionError": "Connection error",
     "pathNotSet": "Please set game path first"
-  }
+  },
+  "fileUpload": {
+    "uploadButton": "Upload Custom Mod",
+    "importTitle": "Import Custom Mod",
+    "importDescription": "Optionally select a champion and set a custom name for your mod.",
+    "selectedFile": "Selected File",
+    "selectChampion": "Select Champion",
+    "championPlaceholder": "No specific champion",
+    "customName": "Custom Name",
+    "customNamePlaceholder": "Enter skin name...",
+    "importing": "Importing...",
+    "import": "Import",
+    "noFileSelected": "No file selected",
+    "invalidFile": "Invalid file format",
+    "importSuccess": "Skin imported successfully!",
+    "importFailed": "Failed to import skin",
+    "previewImage": "Preview Image",
+    "browseImage": "Browse",
+    "noImageSelected": "No image selected"
+  },
+  "cancel": "Cancel",
+  "success": "Success",
+  "error": "Error"
 }

@@ -12,6 +12,8 @@ import { VirtualizedSkinGrid } from './components/VirtualizedSkinGrid'
 import { VirtualizedChampionList } from './components/VirtualizedChampionList'
 import { LocaleProvider } from './contexts/LocaleContextProvider'
 import { useLocale } from './contexts/useLocale'
+import { FileUploadButton } from './components/FileUploadButton'
+import { EditCustomSkinDialog } from './components/EditCustomSkinDialog'
 import {
   championSearchQueryAtom,
   filtersAtom,
@@ -93,6 +95,12 @@ function AppContent(): React.JSX.Element {
   const [filters, setFilters] = useAtom(filtersAtom)
   const [selectedChampionKey, setSelectedChampionKey] = useAtom(selectedChampionKeyAtom)
   const [selectedSkins, setSelectedSkins] = useAtom(selectedSkinsAtom)
+
+  // Edit dialog state
+  const [showEditDialog, setShowEditDialog] = useState<boolean>(false)
+  const [editingCustomSkin, setEditingCustomSkin] = useState<{ path: string; name: string } | null>(
+    null
+  )
 
   const loadChampionData = useCallback(
     async (preserveSelection = false) => {
@@ -393,6 +401,23 @@ function AppContent(): React.JSX.Element {
     }
   }
 
+  const handleDeleteCustomSkin = async (skinPath: string, skinName: string) => {
+    const cleanedName = skinName.replace(/\[User\]\s*/, '').replace(/\.(wad|zip|fantome)$/, '')
+    const result = await window.api.deleteCustomSkin(skinPath)
+
+    if (result.success) {
+      await loadDownloadedSkins()
+      setStatusMessage(`Deleted custom mod: ${cleanedName}`)
+    } else {
+      setStatusMessage(`Failed to delete mod: ${result.error}`)
+    }
+  }
+
+  const handleEditCustomSkin = async (skinPath: string, currentName: string) => {
+    setEditingCustomSkin({ path: skinPath, name: currentName })
+    setShowEditDialog(true)
+  }
+
   const applySelectedSkins = async () => {
     if (!gamePath || selectedSkins.length === 0) {
       return
@@ -423,6 +448,18 @@ function AppContent(): React.JSX.Element {
 
         const skin = champion.skins.find((s) => s.id === selectedSkin.skinId)
         if (!skin) continue
+
+        // Check if this is a custom mod
+        if (champion.key === 'Custom') {
+          // Custom mods are already downloaded, just add to the list
+          const customMod = downloadedSkins.find(
+            (ds) => ds.championName === 'Custom' && ds.skinName.includes(skin.name)
+          )
+          if (customMod) {
+            skinKeys.push(`${champion.key}/${customMod.skinName}`)
+          }
+          continue
+        }
 
         let skinFileName: string
         let githubUrl: string
@@ -617,6 +654,28 @@ function AppContent(): React.JSX.Element {
             }
           }
         })
+      })
+    } else if (selectedChampionKey === 'custom') {
+      // Custom mods - create fake skins from downloaded custom mods
+      const customMods = downloadedSkins.filter((ds) => ds.championName === 'Custom')
+      customMods.forEach((mod, index) => {
+        // Create a fake champion and skin object for custom mods
+        const customChampion: Champion = {
+          id: -1,
+          key: 'Custom',
+          name: 'Custom Mods',
+          title: 'User Imported',
+          image: '',
+          skins: [],
+          tags: []
+        }
+        const customSkin: Skin = {
+          id: `custom_${index}`,
+          num: index + 1,
+          name: mod.skinName.replace('[User] ', '').replace(/\.(wad|zip|fantome)$/, ''),
+          chromas: false
+        }
+        allSkins.push({ champion: customChampion, skin: customSkin })
       })
     }
 
@@ -816,9 +875,18 @@ function AppContent(): React.JSX.Element {
                   onChange={(e) => setSkinSearchQuery(e.target.value)}
                   className="flex-1 px-5 py-3 bg-white dark:bg-charcoal-800 border border-charcoal-200 dark:border-charcoal-700 rounded-xl text-charcoal-700 dark:text-charcoal-200 placeholder-charcoal-400 dark:placeholder-charcoal-500 focus:outline-none focus:ring-2 focus:ring-terracotta-500 focus:border-transparent transition-all duration-200 shadow-soft dark:shadow-none"
                 />
-                <GridViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+                <div className="flex items-center gap-2">
+                  <FileUploadButton
+                    champions={championData.champions}
+                    onSkinImported={loadDownloadedSkins}
+                  />
+                  <GridViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+                </div>
               </div>
-              {(selectedChampion || isSearchingGlobally || selectedChampionKey === 'all') && (
+              {(selectedChampion ||
+                isSearchingGlobally ||
+                selectedChampionKey === 'all' ||
+                selectedChampionKey === 'custom') && (
                 <div className="flex-1 overflow-hidden flex flex-col">
                   {getDisplaySkins().length > 0 ? (
                     <>
@@ -838,6 +906,8 @@ function AppContent(): React.JSX.Element {
                               loading={loading}
                               onSkinClick={handleSkinClick}
                               onToggleFavorite={toggleFavorite}
+                              onDeleteCustomSkin={handleDeleteCustomSkin}
+                              onEditCustomSkin={handleEditCustomSkin}
                               containerWidth={width}
                               containerHeight={height}
                             />
@@ -1004,6 +1074,34 @@ function AppContent(): React.JSX.Element {
           </div>
         )}
       </div>
+
+      {editingCustomSkin && (
+        <EditCustomSkinDialog
+          isOpen={showEditDialog}
+          currentName={editingCustomSkin.name}
+          onClose={() => {
+            setShowEditDialog(false)
+            setEditingCustomSkin(null)
+          }}
+          onSave={async (newName, newImagePath) => {
+            const result = await window.api.editCustomSkin(
+              editingCustomSkin.path,
+              newName,
+              newImagePath
+            )
+
+            if (result.success) {
+              await loadDownloadedSkins()
+              setStatusMessage(`Updated custom mod: ${newName}`)
+            } else {
+              setStatusMessage(`Failed to update mod: ${result.error}`)
+            }
+
+            setShowEditDialog(false)
+            setEditingCustomSkin(null)
+          }}
+        />
+      )}
     </>
   )
 }

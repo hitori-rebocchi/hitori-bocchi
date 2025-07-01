@@ -110,7 +110,8 @@ export class SkinDownloader {
     return {
       championName,
       skinName,
-      url
+      url,
+      source: 'repository' as const
     }
   }
 
@@ -134,13 +135,30 @@ export class SkinDownloader {
             const parts = modFolder.split('_')
             if (parts.length >= 2) {
               const championName = parts[0]
-              const skinName = parts.slice(1).join('_') + '.zip'
+              const restOfName = parts.slice(1).join('_')
+
+              // Check if this is a user mod by looking for [User] prefix or Custom champion
+              const isUserMod = championName === 'Custom' || restOfName.includes('[User]')
+
+              // For user mods, preserve the [User] prefix if it doesn't exist
+              let skinName = restOfName
+              if (isUserMod && !skinName.includes('[User]')) {
+                skinName = '[User] ' + skinName
+              }
+
+              // Add appropriate extension if missing
+              if (!skinName.match(/\.(zip|wad|fantome)$/)) {
+                skinName += '.zip'
+              }
 
               skins.push({
                 championName,
                 skinName,
-                url: `https://github.com/darkseal-org/lol-skins/blob/main/skins/${championName}/${encodeURIComponent(skinName)}`,
-                localPath: modPath
+                url: isUserMod
+                  ? `file://imported`
+                  : `https://github.com/darkseal-org/lol-skins/blob/main/skins/${championName}/${encodeURIComponent(skinName)}`,
+                localPath: modPath,
+                source: isUserMod ? 'user' : 'repository'
               })
             }
           } catch {

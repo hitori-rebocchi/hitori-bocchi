@@ -8,7 +8,7 @@ interface SelectedSkinsDrawerProps {
   onStopPatcher: () => void
   loading: boolean
   isPatcherRunning: boolean
-  downloadedSkins: Array<{ championName: string; skinName: string }>
+  downloadedSkins: Array<{ championName: string; skinName: string; localPath?: string }>
   championData?: {
     champions: Array<{ key: string; skins: Array<{ id: string; nameEn?: string; name: string }> }>
   }
@@ -28,35 +28,52 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
   const [isExpanded, setIsExpanded] = useAtom(selectedSkinsDrawerExpandedAtom)
   const [patcherStatus, setPatcherStatus] = useState<string>('')
   const [patcherMessages, setPatcherMessages] = useState<string[]>([])
+  const [customImages, setCustomImages] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    console.log('[SelectedSkinsDrawer] Setting up patcher event listeners')
-
     // Listen for patcher status updates
     const unsubscribeStatus = window.api.onPatcherStatus((status: string) => {
-      console.log('[SelectedSkinsDrawer] Received patcher-status:', status)
       setPatcherStatus(status)
     })
 
     // Listen for patcher messages
     const unsubscribeMessage = window.api.onPatcherMessage((message: string) => {
-      console.log('[SelectedSkinsDrawer] Received patcher-message:', message)
       setPatcherMessages((prev) => [...prev.slice(-4), message]) // Keep last 5 messages
     })
 
     // Listen for patcher errors
     const unsubscribeError = window.api.onPatcherError((error: string) => {
-      console.error('[SelectedSkinsDrawer] Received patcher-error:', error)
       setPatcherMessages((prev) => [...prev.slice(-4), `Error: ${error}`])
     })
 
     return () => {
-      console.log('[SelectedSkinsDrawer] Cleaning up patcher event listeners')
       unsubscribeStatus()
       unsubscribeMessage()
       unsubscribeError()
     }
   }, [])
+
+  // Load custom images for selected custom skins
+  useEffect(() => {
+    const loadCustomImages = async () => {
+      const customSkins = selectedSkins.filter((s) => s.championKey === 'Custom')
+
+      for (const skin of customSkins) {
+        const modPath = downloadedSkins.find(
+          (ds) => ds.championName === 'Custom' && ds.skinName.includes(skin.skinName)
+        )?.localPath
+
+        if (modPath && !customImages[modPath]) {
+          const result = await window.api.getCustomSkinImage(modPath)
+          if (result.success && result.imageUrl) {
+            setCustomImages((prev) => ({ ...prev, [modPath]: result.imageUrl }))
+          }
+        }
+      }
+    }
+
+    loadCustomImages()
+  }, [selectedSkins, downloadedSkins, customImages])
 
   const handleApplySkins = () => {
     // Clear previous patcher messages when starting a new session
@@ -81,11 +98,29 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
     setSelectedSkins([])
   }
 
-  const getSkinImageUrl = (championKey: string, skinNum: number) => {
-    return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${championKey}_${skinNum}.jpg`
+  const getSkinImageUrl = (skin: SelectedSkin) => {
+    if (skin.championKey === 'Custom') {
+      // Find the mod path for this custom skin
+      const modPath = downloadedSkins.find(
+        (ds) => ds.championName === 'Custom' && ds.skinName.includes(skin.skinName)
+      )?.localPath
+
+      if (modPath && customImages[modPath]) {
+        return customImages[modPath]
+      }
+
+      // Return a placeholder image for custom mods
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzA4IiBoZWlnaHQ9IjU2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMzA4IiBoZWlnaHQ9IjU2MCIgZmlsbD0iIzM3NDE1MSIvPgogIDx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNDgiIGZpbGw9IiNhMGE0YWIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPkN1c3RvbTwvdGV4dD4KPC9zdmc+'
+    }
+    return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${skin.championKey}_${skin.skinNum}.jpg`
   }
 
   const isSkinDownloaded = (skin: SelectedSkin) => {
+    // Custom skins are always "downloaded" since they're user imports
+    if (skin.championKey === 'Custom') {
+      return true
+    }
+
     // Look up the actual skin data to get the correct English name
     let actualNameEn = skin.skinNameEn
     if (championData) {
@@ -116,12 +151,6 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
 
   const downloadedCount = selectedSkins.filter((skin) => isSkinDownloaded(skin)).length
   const needsDownload = downloadedCount < selectedSkins.length
-
-  // Debug logging for patcher state
-  useEffect(() => {
-    console.log('[SelectedSkinsDrawer] State update - patcherStatus:', patcherStatus)
-    console.log('[SelectedSkinsDrawer] State update - patcherMessages:', patcherMessages)
-  }, [patcherStatus, patcherMessages])
 
   return (
     <div className="bg-white dark:bg-charcoal-900 border-t-2 border-charcoal-200 dark:border-charcoal-800 transition-all duration-300">
@@ -219,7 +248,7 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
                 >
                   <div className="relative aspect-[0.67] overflow-hidden bg-charcoal-100 dark:bg-charcoal-800 rounded border border-charcoal-200 dark:border-charcoal-700">
                     <img
-                      src={getSkinImageUrl(skin.championKey, skin.skinNum)}
+                      src={getSkinImageUrl(skin)}
                       alt={skin.skinName}
                       className="w-full h-full object-cover"
                     />

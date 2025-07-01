@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useCallback } from 'react'
+import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react'
 import { FixedSizeGrid as Grid } from 'react-window'
 import type { Champion, Skin } from '../App'
 import type { SelectedSkin } from '../store/atoms'
@@ -6,12 +6,14 @@ import type { SelectedSkin } from '../store/atoms'
 interface VirtualizedSkinGridProps {
   skins: Array<{ champion: Champion; skin: Skin }>
   viewMode: 'compact' | 'comfortable' | 'spacious' | 'list'
-  downloadedSkins: Array<{ championName: string; skinName: string }>
+  downloadedSkins: Array<{ championName: string; skinName: string; localPath?: string }>
   selectedSkins: SelectedSkin[]
   favorites: Set<string>
   loading: boolean
   onSkinClick: (champion: Champion, skin: Skin) => void
   onToggleFavorite: (champion: Champion, skin: Skin) => void
+  onDeleteCustomSkin?: (skinPath: string, skinName: string) => void
+  onEditCustomSkin?: (skinPath: string, currentName: string) => void
   containerWidth: number
   containerHeight: number
 }
@@ -25,6 +27,8 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
   loading,
   onSkinClick,
   onToggleFavorite,
+  onDeleteCustomSkin,
+  onEditCustomSkin,
   containerWidth,
   containerHeight
 }) => {
@@ -95,10 +99,44 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
   }, [viewMode, containerWidth])
 
   const rowCount = Math.ceil(skins.length / columnCount)
+  const [customImages, setCustomImages] = useState<Record<string, string>>({})
 
-  const getSkinImageUrl = (championKey: string, skinNum: number) => {
-    return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${championKey}_${skinNum}.jpg`
-  }
+  const getSkinImageUrl = useCallback(
+    (championKey: string, skinNum: number, modPath?: string) => {
+      if (championKey === 'Custom' && modPath && customImages[modPath]) {
+        return customImages[modPath]
+      }
+
+      if (championKey === 'Custom') {
+        // Return a placeholder image for custom mods
+        return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzA4IiBoZWlnaHQ9IjU2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMzA4IiBoZWlnaHQ9IjU2MCIgZmlsbD0iIzM3NDE1MSIvPgogIDx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNDgiIGZpbGw9IiNhMGE0YWIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPkN1c3RvbTwvdGV4dD4KPC9zdmc+'
+      }
+      return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${championKey}_${skinNum}.jpg`
+    },
+    [customImages]
+  )
+
+  // Load custom images
+  useEffect(() => {
+    const loadCustomImages = async () => {
+      const customSkins = skins.filter((s) => s.champion.key === 'Custom')
+
+      for (const { skin } of customSkins) {
+        const modPath = downloadedSkins.find(
+          (ds) => ds.championName === 'Custom' && ds.skinName.includes(skin.name)
+        )?.localPath
+
+        if (modPath) {
+          const result = await window.api.getCustomSkinImage(modPath)
+          if (result.success && result.imageUrl) {
+            setCustomImages((prev) => ({ ...prev, [modPath]: result.imageUrl! }))
+          }
+        }
+      }
+    }
+
+    loadCustomImages()
+  }, [skins, downloadedSkins])
 
   const Cell = useCallback(
     ({ columnIndex, rowIndex, style }) => {
@@ -107,9 +145,19 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
 
       const { champion, skin } = skins[index]
       const skinFileName = `${skin.nameEn || skin.name}.zip`.replace(/:/g, '')
-      const isDownloaded = downloadedSkins.some(
-        (ds) => ds.championName === champion.key && ds.skinName === skinFileName
-      )
+      const downloadedSkin = downloadedSkins.find((ds) => {
+        if (champion.key === 'Custom') {
+          // For custom mods, match by the skin name in the downloaded list
+          return ds.championName === 'Custom' && ds.skinName.includes(skin.name)
+        }
+        return (
+          ds.championName === champion.key &&
+          (ds.skinName === skinFileName ||
+            (ds.skinName.includes(`[User]`) && ds.skinName.includes(skin.name)))
+        )
+      })
+      const isDownloaded = !!downloadedSkin
+      const isUserSkin = downloadedSkin?.skinName?.includes('[User]')
       const isFavorite = favorites.has(`${champion.key}_${skin.id}`)
       const isSelected = selectedSkins.some(
         (s) => s.championKey === champion.key && s.skinId === skin.id && !s.chromaId
@@ -137,7 +185,7 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
               onClick={() => !loading && onSkinClick(champion, skin)}
             >
               <img
-                src={getSkinImageUrl(champion.key, skin.num)}
+                src={getSkinImageUrl(champion.key, skin.num, downloadedSkin?.localPath)}
                 alt={skin.name}
                 className="w-16 h-16 object-cover rounded"
                 loading="lazy"
@@ -176,8 +224,12 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
                   </span>
                 )}
                 {isDownloaded && (
-                  <span className="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs">↓</span>
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                      isUserSkin ? 'bg-blue-600' : 'bg-green-600'
+                    }`}
+                  >
+                    <span className="text-white text-xs">{isUserSkin ? 'U' : '↓'}</span>
                   </span>
                 )}
                 <button
@@ -194,6 +246,61 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
                 >
                   {isFavorite ? '❤️' : '🤍'}
                 </button>
+                {/* Edit and Delete buttons for custom mods in list view */}
+                {champion.key === 'Custom' && downloadedSkin && (
+                  <>
+                    {onEditCustomSkin && (
+                      <button
+                        className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onEditCustomSkin(downloadedSkin.localPath!, skin.name)
+                        }}
+                        title="Edit custom mod"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                    {onDeleteCustomSkin && (
+                      <button
+                        className="w-8 h-8 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (confirm(`Are you sure you want to delete "${skin.name}"?`)) {
+                            onDeleteCustomSkin(downloadedSkin.localPath!, downloadedSkin.skinName)
+                          }
+                        }}
+                        title="Delete custom mod"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -214,7 +321,7 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
           >
             <div className="relative aspect-[0.67] overflow-hidden bg-charcoal-100 dark:bg-charcoal-900">
               <img
-                src={getSkinImageUrl(champion.key, skin.num)}
+                src={getSkinImageUrl(champion.key, skin.num, downloadedSkin?.localPath)}
                 alt={skin.name}
                 className="w-full h-full object-cover"
                 onClick={() => !loading && onSkinClick(champion, skin)}
@@ -243,10 +350,12 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
               )}
               {isDownloaded && !isSelected && (
                 <div
-                  className="absolute bottom-2 right-2 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center shadow-soft transform transition-all duration-300 group-hover:scale-110"
-                  title="Downloaded"
+                  className={`absolute bottom-2 right-2 w-6 h-6 rounded-full flex items-center justify-center shadow-soft transform transition-all duration-300 group-hover:scale-110 ${
+                    isUserSkin ? 'bg-blue-600' : 'bg-green-600'
+                  }`}
+                  title={isUserSkin ? 'User Import' : 'Downloaded'}
                 >
-                  <span className="text-white text-xs">↓</span>
+                  <span className="text-white text-xs">{isUserSkin ? 'U' : '↓'}</span>
                 </div>
               )}
               <button
@@ -264,6 +373,61 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
               >
                 {isFavorite ? '❤️' : '🤍'}
               </button>
+              {/* Edit and Delete buttons for custom mods */}
+              {champion.key === 'Custom' && downloadedSkin && (
+                <>
+                  {onEditCustomSkin && (
+                    <button
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-blue-600/90 hover:bg-blue-700 text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 shadow-lg"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onEditCustomSkin(downloadedSkin.localPath!, skin.name)
+                      }}
+                      title="Edit custom mod"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                  {onDeleteCustomSkin && (
+                    <button
+                      className="absolute top-10 right-2 w-6 h-6 rounded-full bg-red-600/90 hover:bg-red-700 text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 shadow-lg"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (confirm(`Are you sure you want to delete "${skin.name}"?`)) {
+                          onDeleteCustomSkin(downloadedSkin.localPath!, downloadedSkin.skinName)
+                        }
+                      }}
+                      title="Delete custom mod"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                </>
+              )}
             </div>
             <div
               className={`${viewMode === 'spacious' ? 'p-4' : viewMode === 'comfortable' ? 'p-3' : 'p-2'} bg-white dark:bg-charcoal-800`}
@@ -296,7 +460,10 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
       favorites,
       loading,
       onSkinClick,
-      onToggleFavorite
+      onToggleFavorite,
+      onDeleteCustomSkin,
+      onEditCustomSkin,
+      getSkinImageUrl
     ]
   )
 

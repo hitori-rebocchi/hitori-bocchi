@@ -21,10 +21,12 @@ const VirtualizedChampionListComponent: React.FC<VirtualizedChampionListProps> =
 }) => {
   // Group champions by first letter
   const groupedChampions = React.useMemo(() => {
-    const items: Array<{ type: 'all' | 'divider' | 'letter' | 'champion'; data?: any }> = []
+    const items: Array<{ type: 'all' | 'custom' | 'divider' | 'letter' | 'champion'; data?: any }> =
+      []
 
     // Add "All Champions" option
     items.push({ type: 'all' })
+    items.push({ type: 'custom' })
     items.push({ type: 'divider' })
 
     let lastLetter = ''
@@ -44,7 +46,8 @@ const VirtualizedChampionListComponent: React.FC<VirtualizedChampionListProps> =
     const item = groupedChampions[index]
     switch (item.type) {
       case 'all':
-        return 64 // Height for "All Champions" button
+      case 'custom':
+        return 64 // Height for "All Champions" and "Custom Mods" buttons
       case 'divider':
         return 17 // Height for divider
       case 'letter':
@@ -77,6 +80,26 @@ const VirtualizedChampionListComponent: React.FC<VirtualizedChampionListProps> =
                   <span className="text-lg font-bold">A</span>
                 </div>
                 <span className="text-sm font-medium">All Champions</span>
+              </div>
+            </div>
+          )
+
+        case 'custom':
+          return (
+            <div style={style}>
+              <div
+                className={`flex items-center gap-3 px-6 py-3 cursor-pointer transition-all duration-200 mx-3 my-1 rounded-lg border-2
+                ${
+                  selectedChampion === null && selectedChampionKey === 'custom'
+                    ? 'bg-terracotta-500 text-white shadow-md dark:shadow-dark-soft border-terracotta-600 scale-[1.02]'
+                    : 'hover:bg-cream-100 dark:hover:bg-charcoal-800 text-charcoal-800 dark:text-charcoal-200 border-transparent hover:border-charcoal-200 dark:hover:border-charcoal-700'
+                }`}
+                onClick={() => onChampionSelect(null, 'custom')}
+              >
+                <div className="w-10 h-10 rounded-lg bg-charcoal-200 dark:bg-charcoal-700 flex items-center justify-center">
+                  <span className="text-lg font-bold">C</span>
+                </div>
+                <span className="text-sm font-medium">Custom Mods</span>
               </div>
             </div>
           )
@@ -139,6 +162,7 @@ const VirtualizedChampionListComponent: React.FC<VirtualizedChampionListProps> =
       itemSize={getItemHeight}
       width={width}
       className="scrollbar-thin scrollbar-thumb-charcoal-300 dark:scrollbar-thumb-charcoal-700 scrollbar-track-transparent"
+      style={{ overflow: 'auto' }}
     >
       {Row}
     </List>

@@ -25,4 +25,5 @@ export interface SkinInfo {
   skinName: string
   url: string
   localPath?: string
+  source?: 'repository' | 'user'
 }

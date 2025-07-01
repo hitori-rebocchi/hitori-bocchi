@@ -13,6 +13,15 @@ const api = {
   deleteSkin: (championName: string, skinName: string) =>
     ipcRenderer.invoke('delete-skin', championName, skinName),
 
+  // File import
+  importSkinFile: (
+    filePath: string,
+    options?: { championName?: string; skinName?: string; imagePath?: string }
+  ) => ipcRenderer.invoke('import-skin-file', filePath, options),
+  validateSkinFile: (filePath: string) => ipcRenderer.invoke('validate-skin-file', filePath),
+  browseSkinFile: () => ipcRenderer.invoke('browse-skin-file'),
+  browseImageFile: () => ipcRenderer.invoke('browse-image-file'),
+
   // Patcher controls
   runPatcher: (gamePath: string, selectedSkins: string[]) =>
     ipcRenderer.invoke('run-patcher', gamePath, selectedSkins),
@@ -92,29 +101,29 @@ const api = {
   // App info
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
+  // Custom skin images
+  getCustomSkinImage: (modPath: string) => ipcRenderer.invoke('get-custom-skin-image', modPath),
+  editCustomSkin: (modPath: string, newName: string, newImagePath?: string) =>
+    ipcRenderer.invoke('edit-custom-skin', modPath, newName, newImagePath),
+  deleteCustomSkin: (modPath: string) => ipcRenderer.invoke('delete-custom-skin', modPath),
+
   // Patcher events
   onPatcherStatus: (callback: (status: string) => void) => {
-    console.log('[Preload] Registering patcher-status listener')
     const handler = (_: any, status: string) => {
-      console.log('[Preload] Received patcher-status:', status)
       callback(status)
     }
     ipcRenderer.on('patcher-status', handler)
     return () => ipcRenderer.removeListener('patcher-status', handler)
   },
   onPatcherMessage: (callback: (message: string) => void) => {
-    console.log('[Preload] Registering patcher-message listener')
     const handler = (_: any, message: string) => {
-      console.log('[Preload] Received patcher-message:', message)
       callback(message)
     }
     ipcRenderer.on('patcher-message', handler)
     return () => ipcRenderer.removeListener('patcher-message', handler)
   },
   onPatcherError: (callback: (error: string) => void) => {
-    console.log('[Preload] Registering patcher-error listener')
     const handler = (_: any, error: string) => {
-      console.log('[Preload] Received patcher-error:', error)
       callback(error)
     }
     ipcRenderer.on('patcher-error', handler)

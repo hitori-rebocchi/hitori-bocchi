@@ -113,11 +113,29 @@ export class ModToolsWrapper {
           }
         } else if (output.startsWith('[DLL] ')) {
           const message = output.substring(6)
-          console.log(`[MOD-TOOLS IPC] Sending patcher-message: ${message}`)
-          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-            this.mainWindow.webContents.send('patcher-message', message)
+
+          // Only allow specific status messages
+          const allowedMessages = [
+            'Waiting for league match to start',
+            'Found League',
+            'Wait initialized',
+            'Scanning',
+            'Saving',
+            'Wait patchable',
+            'Patching',
+            'Waiting for exit',
+            'League exited'
+          ]
+
+          if (allowedMessages.includes(message)) {
+            console.log(`[MOD-TOOLS IPC] Sending patcher-message: ${message}`)
+            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+              this.mainWindow.webContents.send('patcher-message', message)
+            } else {
+              console.error('[MOD-TOOLS IPC] No main window available to send message')
+            }
           } else {
-            console.error('[MOD-TOOLS IPC] No main window available to send message')
+            console.log(`[MOD-TOOLS IPC] Filtered out message: ${message}`)
           }
         }
       })
