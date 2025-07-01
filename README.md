@@ -1,34 +1,128 @@
-# cslol-electron-launcher
+# Bocchi - League of Legends Skin Manager
 
-An Electron application with React and TypeScript
+<div align="center">
+  <img src="./resources/icon.png" alt="Bocchi Logo" width="128" height="128">
+  
+  [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+  [![Platform](https://img.shields.io/badge/platform-Windows-brightgreen.svg)](https://github.com/hoangvu12/bocchi/releases)
+  [![Electron](https://img.shields.io/badge/electron-33.x-blue.svg)](https://www.electronjs.org/)
+  [![React](https://img.shields.io/badge/react-19.x-61dafb.svg)](https://react.dev/)
+</div>
 
-## Recommended IDE Setup
+## 📖 Overview
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+Bocchi is a modern, user-friendly desktop application for changing League of Legends skins. Built with Electron and React.
 
-## Project Setup
+## ✨ Features
 
-### Install
+- 🎨 **Browse & Download Skins** - Explore a vast collection of skins
+- 🔍 **Smart Search & Filters** - Find skins quickly with filtering options
+- 💾 **Automatic Installation** - One-click skin installation
+- 🌏 **Multi-language Support** - Available in English and Vietnamese (and more in the future)
+- ⭐ **Favorites System** - Save your favorite skins for quick access
+- 🔄 **Auto-update** - Stay up-to-date with automatic updates
+- 🎮 **Game Detection** - Automatically detects your League of Legends installation
+
+## 📸 Screenshots
+
+<!-- Add screenshots here -->
+<details>
+<summary>Click to view screenshots</summary>
+
+### Main Interface
+
+![Main Interface](./screenshots/main-interface.png)
+_Browse and search for skins with an intuitive interface_
+
+</details>
+
+## 🚀 Installation
+
+### Download
+
+1. Go to the [Releases](https://github.com/hoangvu12/bocchi/releases) page
+2. Download the latest `Bocchi-Setup-x.x.x.exe`
+3. Run the installer and follow the setup wizard
+
+## 🛠️ Development
+
+### Prerequisites
+
+- Node.js 20+
+- pnpm (recommended) or npm
+- Windows (for full functionality)
+
+### Setup
 
 ```bash
-$ npm install
+# Clone the repository
+git clone https://github.com/hoangvu12/bocchi.git
+cd bocchi
+
+# Install dependencies
+pnpm install
+
+# Run in development mode
+pnpm dev
+
+# Build for production
+pnpm build:win
 ```
 
-### Development
+### Technologies
 
-```bash
-$ npm run dev
-```
+- **Frontend**: React 19, TypeScript, Tailwind CSS
+- **Backend**: Electron 33, Node.js
+- **State Management**: Jotai
+- **Build Tool**: Vite
+- **Package Manager**: pnpm
+- **Mod Tools**: cslol-tools integration
 
-### Build
+## 🔧 Configuration
 
-```bash
-# For windows
-$ npm run build:win
+Bocchi stores its configuration and data in:
 
-# For macOS
-$ npm run build:mac
+- **Windows**: `%APPDATA%/bocchi`
 
-# For Linux
-$ npm run build:linux
-```
+### Settings
+
+You can customize various aspects through the settings menu:
+
+- Language preference
+- Download location
+- Theme settings
+- Update preferences
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [cslol-manager](https://github.com/LeagueToolkit/cslol-manager/) - Core modding tools
+
+## ⚠️ Disclaimer
+
+This project is not affiliated with Riot Games. League of Legends and Riot Games are registered trademarks of Riot Games, Inc.
+
+Use at your own risk. Skins are client-side only and do not provide any competitive advantage.
+
+## 📧 Contact
+
+- GitHub Issues: [Create an issue](https://github.com/hoangvu12/bocchi/issues)
+
+---
+
+<div align="center">
+  Made with ❤️ by <a href="https://github.com/hoangvu12">hoangvu12</a>
+</div>
