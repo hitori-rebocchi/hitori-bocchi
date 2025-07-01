@@ -8,14 +8,11 @@ export class ToolsDownloader {
   private toolsPath: string
 
   constructor() {
-    const appPath = app.getAppPath()
-    if (process.env.NODE_ENV === 'development') {
-      // In development, tools should be in parent directory
-      this.toolsPath = path.join(path.dirname(appPath), '..', 'cslol-tools')
-    } else {
-      // In production, tools should be next to the executable
-      this.toolsPath = path.join(path.dirname(app.getPath('exe')), 'cslol-tools')
-    }
+    // Store tools in user data directory so they persist across app updates
+    this.toolsPath = path.join(app.getPath('userData'), 'cslol-tools')
+
+    // Migrate tools from old location if they exist
+    this.migrateToolsFromOldLocation()
   }
 
   async checkToolsExist(): Promise<boolean> {
@@ -147,5 +144,47 @@ export class ToolsDownloader {
 
   getToolsPath(): string {
     return this.toolsPath
+  }
+
+  private async migrateToolsFromOldLocation(): Promise<void> {
+    try {
+      // Determine old location based on environment
+      let oldToolsPath: string
+      if (process.env.NODE_ENV === 'development') {
+        const appPath = app.getAppPath()
+        oldToolsPath = path.join(path.dirname(appPath), '..', 'cslol-tools')
+      } else {
+        oldToolsPath = path.join(path.dirname(app.getPath('exe')), 'cslol-tools')
+      }
+
+      // Check if old location exists and new location doesn't
+      const oldExists = await fs.promises
+        .access(oldToolsPath)
+        .then(() => true)
+        .catch(() => false)
+      const newExists = await fs.promises
+        .access(this.toolsPath)
+        .then(() => true)
+        .catch(() => false)
+
+      if (oldExists && !newExists) {
+        console.log(`Migrating CS:LOL tools from ${oldToolsPath} to ${this.toolsPath}`)
+
+        // Create parent directory if needed
+        const parentDir = path.dirname(this.toolsPath)
+        await fs.promises.mkdir(parentDir, { recursive: true })
+
+        // Move the tools to new location
+        await this.copyDirectory(oldToolsPath, this.toolsPath)
+
+        // Remove old location after successful copy
+        await fs.promises.rm(oldToolsPath, { recursive: true, force: true })
+
+        console.log('CS:LOL tools migration completed successfully')
+      }
+    } catch (error) {
+      console.error('Error during tools migration:', error)
+      // Don't throw - migration failure shouldn't break the app
+    }
   }
 }

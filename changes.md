@@ -1,1 +1,1 @@
-- Fix App freeze after selecting champion.
+- Fix cslol-tools must be reinstalled every new updates
