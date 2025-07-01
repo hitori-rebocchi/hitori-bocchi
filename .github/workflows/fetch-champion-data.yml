@@ -34,16 +34,17 @@ jobs:
 
       - name: Create and push to champion-data branch
         run: |
-          # Create or switch to champion-data branch
-          git checkout -B champion-data
-
-          # Force add the fetched data (since it's in .gitignore)
-          git add -f data/
-
-          # Commit if there are changes
-          if ! git diff --cached --quiet; then
-            git commit -m "Update champion data - $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-            git push origin champion-data --force
-          else
-            echo "No changes to champion data"
-          fi
+          # Create a new orphan branch (no history)
+          git checkout --orphan champion-data
+          
+          # Remove all files from tracking
+          git rm -rf .
+          
+          # Add only the data files
+          git add -f data/*
+          
+          # Commit the data
+          git commit -m "Update champion data - $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          
+          # Force push to champion-data branch
+          git push origin champion-data --force
