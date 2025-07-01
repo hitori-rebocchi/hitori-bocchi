@@ -66,7 +66,7 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
         if (modPath && !customImages[modPath]) {
           const result = await window.api.getCustomSkinImage(modPath)
           if (result.success && result.imageUrl) {
-            setCustomImages((prev) => ({ ...prev, [modPath]: result.imageUrl }))
+            setCustomImages((prev) => ({ ...prev, [modPath]: result.imageUrl! }))
           }
         }
       }

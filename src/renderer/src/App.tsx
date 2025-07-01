@@ -14,6 +14,7 @@ import { LocaleProvider } from './contexts/LocaleContextProvider'
 import { useLocale } from './contexts/useLocale'
 import { FileUploadButton } from './components/FileUploadButton'
 import { EditCustomSkinDialog } from './components/EditCustomSkinDialog'
+import { DownloadedSkinsDialog } from './components/DownloadedSkinsDialog'
 import {
   championSearchQueryAtom,
   filtersAtom,
@@ -101,6 +102,8 @@ function AppContent(): React.JSX.Element {
   const [editingCustomSkin, setEditingCustomSkin] = useState<{ path: string; name: string } | null>(
     null
   )
+  // Downloaded skins dialog state
+  const [showDownloadedSkinsDialog, setShowDownloadedSkinsDialog] = useState<boolean>(false)
 
   const loadChampionData = useCallback(
     async (preserveSelection = false) => {
@@ -416,6 +419,18 @@ function AppContent(): React.JSX.Element {
   const handleEditCustomSkin = async (skinPath: string, currentName: string) => {
     setEditingCustomSkin({ path: skinPath, name: currentName })
     setShowEditDialog(true)
+  }
+
+  const handleDeleteDownloadedSkin = async (championName: string, skinName: string) => {
+    const result = await window.api.deleteSkin(championName, skinName)
+
+    if (result.success) {
+      await loadDownloadedSkins()
+      const cleanedName = skinName.replace(/\[User\]\s*/, '').replace(/\.(wad|zip|fantome)$/, '')
+      setStatusMessage(`Deleted skin: ${cleanedName}`)
+    } else {
+      setStatusMessage(`Failed to delete skin: ${result.error}`)
+    }
   }
 
   const applySelectedSkins = async () => {
@@ -880,6 +895,21 @@ function AppContent(): React.JSX.Element {
                     champions={championData.champions}
                     onSkinImported={loadDownloadedSkins}
                   />
+                  <button
+                    onClick={() => setShowDownloadedSkinsDialog(true)}
+                    className="px-4 py-2.5 text-sm bg-white dark:bg-charcoal-800 hover:bg-cream-100 dark:hover:bg-charcoal-700 text-charcoal-800 dark:text-charcoal-200 font-medium rounded-lg transition-all duration-200 border border-charcoal-200 dark:border-charcoal-700 hover:border-charcoal-300 dark:hover:border-charcoal-600 shadow-sm hover:shadow-md dark:shadow-none flex items-center gap-2"
+                    title="Manage downloaded skins"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                      />
+                    </svg>
+                    Manage
+                  </button>
                   <GridViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
                 </div>
               </div>
@@ -1102,6 +1132,15 @@ function AppContent(): React.JSX.Element {
           }}
         />
       )}
+
+      <DownloadedSkinsDialog
+        isOpen={showDownloadedSkinsDialog}
+        onClose={() => setShowDownloadedSkinsDialog(false)}
+        downloadedSkins={downloadedSkins}
+        championData={championData || undefined}
+        onDeleteSkin={handleDeleteDownloadedSkin}
+        onRefresh={loadDownloadedSkins}
+      />
     </>
   )
 }
