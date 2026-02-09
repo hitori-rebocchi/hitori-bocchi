@@ -251,6 +251,7 @@ export interface IApi {
   onToolsDownloadDetails: (
     callback: (details: { loaded: number; total: number; speed: number }) => void
   ) => () => void
+  onDllUrlRequired: (callback: () => void) => () => void
 
   // Window controls
   minimizeWindow: () => void

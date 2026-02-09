@@ -170,6 +170,10 @@ const api = {
     ipcRenderer.on('tools-download-details', handler)
     return () => ipcRenderer.removeListener('tools-download-details', handler)
   },
+  onDllUrlRequired: (callback: () => void) => {
+    ipcRenderer.on('dll-url-required', callback)
+    return () => ipcRenderer.removeListener('dll-url-required', callback)
+  },
 
   // Window controls
   minimizeWindow: () => ipcRenderer.send('window-minimize'),

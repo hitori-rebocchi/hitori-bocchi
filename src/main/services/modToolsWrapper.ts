@@ -7,7 +7,6 @@ import axios from 'axios'
 
 // Version that requires DLL replacement
 const DLL_FIX_REQUIRED_VERSION = '2025-12-03-2dfb8fe'
-const DLL_DOWNLOAD_URL = 'https://github.com/hoangvu12/bocchi/raw/cslol-dll/cslol-dll.dll'
 
 export class ModToolsWrapper {
   private profilesPath: string
@@ -132,10 +131,20 @@ export class ModToolsWrapper {
         return
       }
 
-      console.log('[ModToolsWrapper] Downloading DLL fix from GitHub...')
+      // Get user-configured DLL URL
+      const dllUrl = settingsService.get('dllUrl') as string | undefined
+      if (!dllUrl) {
+        console.warn('[ModToolsWrapper] No DLL URL configured, notifying renderer')
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('dll-url-required')
+        }
+        return
+      }
 
-      // Download the DLL from GitHub
-      const response = await axios.get(DLL_DOWNLOAD_URL, {
+      console.log('[ModToolsWrapper] Downloading DLL fix from user-provided URL...')
+
+      // Download the DLL from the user-provided URL
+      const response = await axios.get(dllUrl, {
         responseType: 'arraybuffer',
         timeout: 30000
       })

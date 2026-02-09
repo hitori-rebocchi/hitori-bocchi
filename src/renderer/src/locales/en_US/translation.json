@@ -108,7 +108,10 @@
     "maxRetriesReached": "Max Retries Reached",
     "downloadManuallyFromGithub": "Download manually from GitHub",
     "extractTo": "Extract to:",
-    "havingTrouble": "Having trouble? You can also:"
+    "havingTrouble": "Having trouble? You can also:",
+    "dllUrl": "DLL Download URL",
+    "dllUrlDescription": "Provide a direct download link to a valid cslol-dll.dll file. This is required for the patcher to work.",
+    "dllUrlMissing": "DLL URL not configured. Please set it in the Tools Download section or Settings."
   },
   "downloadAll": {
     "title": "Download All Skins",
@@ -240,6 +243,10 @@
       "title": "Mod Tools Timeout",
       "description": "Maximum time to wait for mod import and overlay creation operations",
       "hint": "Increase this value if you have many mods or a slow system. Decrease for faster failure detection."
+    },
+    "dllUrl": {
+      "title": "DLL Download URL",
+      "description": "Direct download link to the cslol-dll.dll file. Required for the patcher to work correctly."
     },
     "cacheManagement": {
       "title": "Skin Cache Management",

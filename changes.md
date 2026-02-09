@@ -1,5 +1,3 @@
-- Adapted to LeagueSkins new name-based repository structure
-- Removed multi-repository feature
-- Added .fantome fallback when .zip is not available
-- Fixed duplicate champion data fetching on startup
-- Fixed duplicate downloaded skins check during patching
+- Removed hosted DLL file per DMCA takedown
+- Users now provide their own DLL download URL via settings
+- Added DLL URL input to Tools Download modal and Settings dialog

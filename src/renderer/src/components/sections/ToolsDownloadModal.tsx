@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useToolsManagement } from '../../hooks/useToolsManagement'
 import { useStyles, useClassNames } from '../../hooks/useOptimizedState'
-import { AlertCircle, Download, RefreshCw, ExternalLink, Loader2 } from 'lucide-react'
-import { useState } from 'react'
+import { AlertCircle, Download, RefreshCw, ExternalLink, Loader2, Link2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
 
 export function ToolsDownloadModal() {
   const { t } = useTranslation()
@@ -19,6 +19,37 @@ export function ToolsDownloadModal() {
   const styles = useStyles()
   const { getProgressBarFillStyle } = useClassNames()
   const [showDetails, setShowDetails] = useState(false)
+  const [dllUrl, setDllUrl] = useState('')
+  const [dllUrlError, setDllUrlError] = useState<string | null>(null)
+
+  // Load saved DLL URL on mount
+  useEffect(() => {
+    window.api.getSettings('dllUrl').then((savedUrl) => {
+      if (typeof savedUrl === 'string') {
+        setDllUrl(savedUrl)
+      }
+    })
+  }, [])
+
+  const handleDllUrlSave = async () => {
+    const trimmed = dllUrl.trim()
+    if (!trimmed) {
+      setDllUrlError('Please enter a URL')
+      return
+    }
+    try {
+      new URL(trimmed)
+    } catch {
+      setDllUrlError('Please enter a valid URL')
+      return
+    }
+    if (!trimmed.toLowerCase().endsWith('.dll')) {
+      setDllUrlError('URL must point to a .dll file')
+      return
+    }
+    setDllUrlError(null)
+    await window.api.setSettings('dllUrl', trimmed)
+  }
 
   if (toolsExist !== false) return null
 
@@ -131,6 +162,31 @@ export function ToolsDownloadModal() {
         </div>
 
         <p className="text-text-secondary mb-6 leading-relaxed">{t('tools.description')}</p>
+
+        {/* DLL URL Input */}
+        <div className="mb-6 p-4 bg-surface-lighter rounded-lg border border-surface-border">
+          <div className="flex items-center gap-2 mb-2">
+            <Link2 className="w-4 h-4 text-primary-500" />
+            <h4 className="text-sm font-medium text-text-primary">{t('tools.dllUrl')}</h4>
+          </div>
+          <p className="text-xs text-text-secondary mb-3">{t('tools.dllUrlDescription')}</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="https://example.com/path/to/cslol-dll.dll"
+              value={dllUrl}
+              onChange={(e) => {
+                setDllUrl(e.target.value)
+                setDllUrlError(null)
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && handleDllUrlSave()}
+              onBlur={handleDllUrlSave}
+              className="flex-1 px-3 py-2 text-sm bg-surface border border-surface-border rounded-lg text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary-500"
+              disabled={downloadingTools}
+            />
+          </div>
+          {dllUrlError && <p className="text-xs text-red-400 mt-2">{dllUrlError}</p>}
+        </div>
 
         {/* Error State */}
         {toolsError && !downloadingTools && (
