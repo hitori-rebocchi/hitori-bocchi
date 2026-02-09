@@ -109,9 +109,11 @@
     "downloadManuallyFromGithub": "Download manually from GitHub",
     "extractTo": "Extract to:",
     "havingTrouble": "Having trouble? You can also:",
-    "dllUrl": "DLL Download URL",
-    "dllUrlDescription": "Provide a direct download link to a valid cslol-dll.dll file. This is required for the patcher to work.",
-    "dllUrlMissing": "DLL URL not configured. Please set it in the Tools Download section or Settings."
+    "dllRequired": "DLL Required",
+    "dllDmcaNotice": "Due to a recent DMCA takedown, Bocchi can no longer distribute the cslol-dll.dll file.",
+    "dllInstructions": "To use Bocchi, you must provide your own signed cslol-dll.dll file. Please obtain a properly signed cslol-dll.dll from an authorized source (such as building it yourself from the LeagueToolkit/cslol-manager repository) and place it in the tools folder.",
+    "dllWithoutNotice": "Click the button below to open the folder where you should place the DLL. Without this file, Bocchi cannot function.",
+    "openToolsFolder": "Open Tools Folder"
   },
   "downloadAll": {
     "title": "Download All Skins",
@@ -243,10 +245,6 @@
       "title": "Mod Tools Timeout",
       "description": "Maximum time to wait for mod import and overlay creation operations",
       "hint": "Increase this value if you have many mods or a slow system. Decrease for faster failure detection."
-    },
-    "dllUrl": {
-      "title": "DLL Download URL",
-      "description": "Direct download link to the cslol-dll.dll file. Required for the patcher to work correctly."
     },
     "cacheManagement": {
       "title": "Skin Cache Management",

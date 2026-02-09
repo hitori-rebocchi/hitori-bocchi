@@ -1,8 +1,16 @@
 import { useTranslation } from 'react-i18next'
 import { useToolsManagement } from '../../hooks/useToolsManagement'
 import { useStyles, useClassNames } from '../../hooks/useOptimizedState'
-import { AlertCircle, Download, RefreshCw, ExternalLink, Loader2, Link2 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import {
+  AlertCircle,
+  AlertTriangle,
+  Download,
+  RefreshCw,
+  ExternalLink,
+  Loader2,
+  FolderOpen
+} from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
 
 export function ToolsDownloadModal() {
   const { t } = useTranslation()
@@ -19,39 +27,31 @@ export function ToolsDownloadModal() {
   const styles = useStyles()
   const { getProgressBarFillStyle } = useClassNames()
   const [showDetails, setShowDetails] = useState(false)
-  const [dllUrl, setDllUrl] = useState('')
-  const [dllUrlError, setDllUrlError] = useState<string | null>(null)
+  const [dllExists, setDllExists] = useState<boolean | null>(null)
 
-  // Load saved DLL URL on mount
+  const checkDll = useCallback(async () => {
+    if (toolsExist) {
+      const exists = await window.api.checkDllExist()
+      setDllExists(exists)
+    }
+  }, [toolsExist])
+
+  // Check DLL when tools exist
   useEffect(() => {
-    window.api.getSettings('dllUrl').then((savedUrl) => {
-      if (typeof savedUrl === 'string') {
-        setDllUrl(savedUrl)
-      }
-    })
-  }, [])
+    checkDll()
+  }, [checkDll])
 
-  const handleDllUrlSave = async () => {
-    const trimmed = dllUrl.trim()
-    if (!trimmed) {
-      setDllUrlError('Please enter a URL')
-      return
-    }
-    try {
-      new URL(trimmed)
-    } catch {
-      setDllUrlError('Please enter a valid URL')
-      return
-    }
-    if (!trimmed.toLowerCase().endsWith('.dll')) {
-      setDllUrlError('URL must point to a .dll file')
-      return
-    }
-    setDllUrlError(null)
-    await window.api.setSettings('dllUrl', trimmed)
-  }
+  // Poll for DLL when tools exist but DLL is missing
+  useEffect(() => {
+    if (!toolsExist || dllExists !== false) return
+    const interval = setInterval(checkDll, 2000)
+    return () => clearInterval(interval)
+  }, [toolsExist, dllExists, checkDll])
 
-  if (toolsExist !== false) return null
+  // Modal is hidden when both tools and DLL exist
+  if (toolsExist && dllExists !== false) return null
+  // Still loading DLL check
+  if (toolsExist && dllExists === null) return null
 
   // Format bytes to human readable
   const formatBytes = (bytes: number) => {
@@ -151,6 +151,47 @@ export function ToolsDownloadModal() {
     downloadTools(true)
   }
 
+  const handleOpenToolsFolder = () => {
+    window.api.openToolsFolder()
+  }
+
+  // Phase 2: Tools downloaded but DLL missing
+  if (toolsExist && dllExists === false) {
+    return (
+      <div className={styles.toolsModalOverlay.className}>
+        <div className={styles.toolsModalContent.className}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-yellow-500/10 rounded-lg">
+              <AlertTriangle className="w-6 h-6 text-yellow-500" />
+            </div>
+            <h3 className="text-xl font-bold text-text-primary">{t('tools.dllRequired')}</h3>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-text-secondary leading-relaxed text-sm">
+              {t('tools.dllDmcaNotice')}
+            </p>
+
+            <p className="text-text-secondary leading-relaxed text-sm">
+              {t('tools.dllInstructions')}
+            </p>
+
+            <p className="text-xs text-text-tertiary">{t('tools.dllWithoutNotice')}</p>
+
+            <button
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-medium"
+              onClick={handleOpenToolsFolder}
+            >
+              <FolderOpen className="w-5 h-5" />
+              {t('tools.openToolsFolder')}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Phase 1: Tools not downloaded
   return (
     <div className={styles.toolsModalOverlay.className}>
       <div className={styles.toolsModalContent.className}>
@@ -162,31 +203,6 @@ export function ToolsDownloadModal() {
         </div>
 
         <p className="text-text-secondary mb-6 leading-relaxed">{t('tools.description')}</p>
-
-        {/* DLL URL Input */}
-        <div className="mb-6 p-4 bg-surface-lighter rounded-lg border border-surface-border">
-          <div className="flex items-center gap-2 mb-2">
-            <Link2 className="w-4 h-4 text-primary-500" />
-            <h4 className="text-sm font-medium text-text-primary">{t('tools.dllUrl')}</h4>
-          </div>
-          <p className="text-xs text-text-secondary mb-3">{t('tools.dllUrlDescription')}</p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="https://example.com/path/to/cslol-dll.dll"
-              value={dllUrl}
-              onChange={(e) => {
-                setDllUrl(e.target.value)
-                setDllUrlError(null)
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && handleDllUrlSave()}
-              onBlur={handleDllUrlSave}
-              className="flex-1 px-3 py-2 text-sm bg-surface border border-surface-border rounded-lg text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary-500"
-              disabled={downloadingTools}
-            />
-          </div>
-          {dllUrlError && <p className="text-xs text-red-400 mt-2">{dllUrlError}</p>}
-        </div>
 
         {/* Error State */}
         {toolsError && !downloadingTools && (
@@ -317,8 +333,6 @@ export function ToolsDownloadModal() {
             )}
           </div>
         )}
-
-        {/* Success feedback would appear here if needed */}
       </div>
     </div>
   )

@@ -738,17 +738,6 @@ function AppContent(): React.JSX.Element {
     }
   }, [t])
 
-  // Listen for DLL URL required event
-  useEffect(() => {
-    const unsubscribe = window.api.onDllUrlRequired(() => {
-      toast.warning(t('tools.dllUrlMissing'), {
-        duration: 5000,
-        position: 'top-center'
-      })
-    })
-    return () => unsubscribe()
-  }, [t])
-
   // Handle skin click
   const handleSkinClick = useCallback(
     (champion: Champion, skin: Skin, chromaId?: string, variantId?: string) => {

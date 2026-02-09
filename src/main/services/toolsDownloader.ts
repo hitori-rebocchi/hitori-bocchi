@@ -332,8 +332,9 @@ export class ToolsDownloader {
       // Save version info
       await fs.promises.writeFile(this.cslolToolsVersionPath, version)
 
-      // Reset DLL replacement flag so it gets re-applied for fresh installation
-      settingsService.set('dllReplacedVersion', null)
+      // Remove the bundled cslol-dll.dll (it doesn't work, user must provide their own)
+      const bundledDll = path.join(targetPath, 'cslol-dll.dll')
+      await fs.promises.rm(bundledDll, { force: true }).catch(() => {})
 
       // Clean up temp files
       await fs.promises.rm(tempDir, { recursive: true, force: true })

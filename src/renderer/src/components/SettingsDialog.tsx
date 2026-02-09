@@ -76,7 +76,6 @@ export function SettingsDialog({
   const [minimizeToTray, setMinimizeToTray] = useState(false)
   const [autoExtractImages, setAutoExtractImages] = useState(false)
   const [modToolsTimeout, setModToolsTimeout] = useState(300) // Default 300 seconds
-  const [dllUrl, setDllUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [cacheInfo, setCacheInfo] = useState<{
     exists: boolean
@@ -199,7 +198,6 @@ export function SettingsDialog({
       setMinimizeToTray((settings.minimizeToTray as boolean | undefined) === true)
       setAutoExtractImages((settings.autoExtractImages as boolean | undefined) === true)
       setModToolsTimeout((settings.modToolsTimeout as number | undefined) || 300) // Default 300 seconds
-      setDllUrl((settings.dllUrl as string | undefined) || '')
     } catch (error) {
       console.error('Failed to load settings:', error)
     } finally {
@@ -514,18 +512,6 @@ export function SettingsDialog({
       await window.api.setSettings('modToolsTimeout', timeout)
     } catch (error) {
       console.error('Failed to save mod tools timeout setting:', error)
-    }
-  }
-
-  const handleDllUrlSave = async () => {
-    const trimmed = dllUrl.trim()
-    if (trimmed) {
-      try {
-        new URL(trimmed)
-        await window.api.setSettings('dllUrl', trimmed)
-      } catch {
-        // Invalid URL, ignore
-      }
     }
   }
 
@@ -1004,24 +990,6 @@ export function SettingsDialog({
                 className="w-full"
               />
               <p className="text-xs text-text-secondary">{t('settings.modToolsTimeout.hint')}</p>
-            </div>
-
-            {/* DLL URL Setting */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-text-primary">
-                {t('settings.dllUrl.title')}
-              </h3>
-              <p className="text-xs text-text-secondary">{t('settings.dllUrl.description')}</p>
-              <input
-                type="text"
-                placeholder="https://example.com/path/to/cslol-dll.dll"
-                value={dllUrl}
-                onChange={(e) => setDllUrl(e.target.value)}
-                onBlur={handleDllUrlSave}
-                onKeyDown={(e) => e.key === 'Enter' && handleDllUrlSave()}
-                className="w-full px-3 py-2 text-sm bg-surface border border-border rounded-md text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary-500"
-                disabled={loading}
-              />
             </div>
 
             {/* Cache Management */}

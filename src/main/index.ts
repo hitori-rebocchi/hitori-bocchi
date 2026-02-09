@@ -1623,6 +1623,19 @@ function setupIpcHandlers(): void {
     return await toolsDownloader.checkToolsExist()
   })
 
+  ipcMain.handle('check-dll-exist', async () => {
+    return await modToolsWrapper.checkDllExist()
+  })
+
+  ipcMain.handle('open-tools-folder', async () => {
+    const toolsPath = settingsService.getModToolsPath()
+    if (toolsPath) {
+      shell.openPath(toolsPath)
+      return { success: true }
+    }
+    return { success: false, error: 'Tools path not configured' }
+  })
+
   ipcMain.handle('check-cslol-tools-update', async () => {
     try {
       const updateInfo = await toolsDownloader.checkCslolToolsUpdate()
