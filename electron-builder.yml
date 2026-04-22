@@ -47,8 +47,8 @@ nsis:
 npmRebuild: false
 publish:
   provider: github
-  owner: hoangvu12
-  repo: bocchi
+  owner: hitori-rebocchi
+  repo: hitori-bocchi
   releaseType: release
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
