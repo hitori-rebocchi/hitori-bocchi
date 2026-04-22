@@ -38,6 +38,7 @@ import { SkinInfo } from './types'
 import { PresetService } from './services/presetService'
 import { urlDownloadService } from './services/urlDownloadService'
 import { FileImportOptions } from './services/fileImportService'
+import { sanitizeFsName } from '../shared/utils/skinFilename'
 import {
   SelectedSkin,
   PresetUpdate,
@@ -45,6 +46,16 @@ import {
   PreselectSnapshot,
   PreselectChampion
 } from './types/preload.types'
+/**
+ * Splits a skinKey "champion/skinFile" on only the FIRST slash.
+ * Skin names like "K/DA" contain slashes, so split('/') would break them.
+ */
+function parseSkinKey(skinKey: string): [string, string] {
+  const idx = skinKey.indexOf('/')
+  if (idx === -1) return [skinKey, '']
+  return [skinKey.slice(0, idx), skinKey.slice(idx + 1)]
+}
+
 // Initialize services
 const skinDownloader = new SkinDownloader()
 const modToolsWrapper = new ModToolsWrapper()
@@ -816,7 +827,7 @@ function setupIpcHandlers(): void {
 
       // 0. Filter out base skins when their chromas are selected
       const filteredSkins = skinKeys.filter((skinKey) => {
-        const [champion, skinFile] = skinKey.split('/')
+        const [champion, skinFile] = parseSkinKey(skinKey)
 
         // Check if this is a base skin
         const baseSkinName = skinFile.replace('.zip', '')
@@ -824,7 +835,7 @@ function setupIpcHandlers(): void {
         // Check if any chroma of this skin is also selected
         const hasChromaSelected = skinKeys.some((otherKey) => {
           if (otherKey === skinKey) return false
-          const [otherChampion, otherFile] = otherKey.split('/')
+          const [otherChampion, otherFile] = parseSkinKey(otherKey)
           if (champion !== otherChampion) return false
 
           // Check if otherFile is a chroma of this base skin
@@ -849,7 +860,7 @@ function setupIpcHandlers(): void {
       if (!allowMultipleSkinsPerChampion) {
         const championCounts = new Map<string, number>()
         for (const skinKey of filteredSkins) {
-          const champion = skinKey.split('/')[0]
+          const [champion] = parseSkinKey(skinKey)
           championCounts.set(champion, (championCounts.get(champion) || 0) + 1)
         }
 
@@ -868,7 +879,7 @@ function setupIpcHandlers(): void {
       const downloadedSkins = await skinDownloader.listDownloadedSkins()
       const skinInfosToProcess = await Promise.allSettled(
         filteredSkins.map(async (skinKey) => {
-          const [champion, skinFile] = skinKey.split('/')
+          const [champion, skinFile] = parseSkinKey(skinKey)
 
           // Handle user-imported skins
           // Check if this is a custom skin using the context map
@@ -965,13 +976,14 @@ function setupIpcHandlers(): void {
           // Check if the skin is already downloaded (list fetched once before the loop)
           const skinCtx = skinContextMap.get(skinKey)
           const properChampionName = skinCtx?.championName || champion
+          const sanitizedSkinFile = sanitizeFsName(skinFile.replace(/\.zip$/i, '')) + '.zip'
           const existingSkin = downloadedSkins.find(
             (ds) =>
               (ds.championName === champion ||
                 decodeURIComponent(ds.championName) === champion ||
                 ds.championName === properChampionName ||
                 decodeURIComponent(ds.championName) === properChampionName) &&
-              ds.skinName === skinFile
+              (ds.skinName === skinFile || ds.skinName === sanitizedSkinFile)
           )
 
           if (existingSkin && existingSkin.localPath) {
@@ -1143,7 +1155,7 @@ function setupIpcHandlers(): void {
             championIdMap.set(skin.championKey, skin.championId)
           }
           // Store the full context for each skin (build early for context lookup)
-          const skinNameToUse = (skin.skinNameEn || skin.skinName).replace(/:/g, '')
+          const skinNameToUse = sanitizeFsName(skin.skinNameEn || skin.skinName)
           const skinNameWithChroma = skin.chromaId
             ? `${skinNameToUse} ${skin.chromaId}.zip`
             : `${skinNameToUse}.zip`
@@ -1169,7 +1181,7 @@ function setupIpcHandlers(): void {
           // Regular skins from repository
           // For chromas, append the chroma ID
           // Use proper name priority for downloading from repository: nameEn -> name
-          const skinNameToUse = (skin.skinNameEn || skin.skinName).replace(/:/g, '')
+          const skinNameToUse = sanitizeFsName(skin.skinNameEn || skin.skinName)
           const skinNameWithChroma = skin.chromaId
             ? `${skinNameToUse} ${skin.chromaId}.zip`
             : `${skinNameToUse}.zip`
@@ -1180,7 +1192,7 @@ function setupIpcHandlers(): void {
         // First validate for single skin per champion
         const championCounts = new Map<string, number>()
         for (const skinKey of skinKeys) {
-          const champion = skinKey.split('/')[0]
+          const [champion] = parseSkinKey(skinKey)
           championCounts.set(champion, (championCounts.get(champion) || 0) + 1)
         }
 
@@ -1198,7 +1210,7 @@ function setupIpcHandlers(): void {
         const downloadedSkins = await skinDownloader.listDownloadedSkins()
         const skinInfosToProcess = await Promise.allSettled(
           skinKeys.map(async (skinKey) => {
-            const [champion, skinFile] = skinKey.split('/')
+            const [champion, skinFile] = parseSkinKey(skinKey)
 
             // Check if this is a custom skin using the context map
             const skinContext = skinContextMap.get(skinKey)
@@ -1292,13 +1304,14 @@ function setupIpcHandlers(): void {
             // Check if the skin is already downloaded (list fetched once before the loop)
             const skinCtx = skinContextMap.get(skinKey)
             const properChampionName = skinCtx?.championName || champion
+            const sanitizedSkinFile = sanitizeFsName(skinFile.replace(/\.zip$/i, '')) + '.zip'
             const existingSkin = downloadedSkins.find(
               (ds) =>
                 (ds.championName === champion ||
                   decodeURIComponent(ds.championName) === champion ||
                   ds.championName === properChampionName ||
                   decodeURIComponent(ds.championName) === properChampionName) &&
-                ds.skinName === skinFile
+                (ds.skinName === skinFile || ds.skinName === sanitizedSkinFile)
             )
 
             if (existingSkin && existingSkin.localPath) {
@@ -1807,6 +1820,87 @@ function setupIpcHandlers(): void {
   ipcMain.handle('get-app-version', () => {
     return app.getVersion()
   })
+
+  // Repository management
+  ipcMain.handle('repository:get-all', async () => {
+    try {
+      const repositories = repositoryService.getRepositories()
+      return { success: true, data: repositories }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle('repository:get-active', async () => {
+    try {
+      const activeRepository = repositoryService.getActiveRepository()
+      return { success: true, data: activeRepository }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle('repository:set-active', async (_, repositoryId: string) => {
+    try {
+      const result = repositoryService.setActiveRepository(repositoryId)
+      return { success: result }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle(
+    'repository:add',
+    async (
+      _,
+      repository: Omit<import('./types/repository.types').SkinRepository, 'id' | 'status'>
+    ) => {
+      try {
+        const newRepo = await repositoryService.addRepository(repository)
+        return { success: true, data: newRepo }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+      }
+    }
+  )
+
+  ipcMain.handle('repository:remove', async (_, repositoryId: string) => {
+    try {
+      const result = repositoryService.removeRepository(repositoryId)
+      return { success: result }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle('repository:validate', async (_, repositoryId: string) => {
+    try {
+      const repository = repositoryService.getRepositoryById(repositoryId)
+      if (!repository) {
+        return { success: false, error: 'Repository not found' }
+      }
+      const isValid = await repositoryService.validateRepository(repository)
+      return { success: true, data: isValid }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle(
+    'repository:update',
+    async (
+      _,
+      repositoryId: string,
+      updates: Partial<import('./types/repository.types').SkinRepository>
+    ) => {
+      try {
+        const result = repositoryService.updateRepository(repositoryId, updates)
+        return { success: result }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+      }
+    }
+  )
 
   // Repository URL construction
   ipcMain.handle(

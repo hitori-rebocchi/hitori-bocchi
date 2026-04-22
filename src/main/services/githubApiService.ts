@@ -1,6 +1,5 @@
 import axios from 'axios'
 import { repositoryService } from './repositoryService'
-import { LEAGUESKINS_REPO } from '../types/repository.types'
 
 export interface GitHubCommit {
   sha: string
@@ -19,7 +18,7 @@ export class GitHubApiService {
       // Rate limiting
       await this.enforceRateLimit()
 
-      const repo = LEAGUESKINS_REPO
+      const repo = repositoryService.getActiveRepository()
       const repoPath = `${repo.owner}/${repo.repo}`
 
       const url = `${GitHubApiService.API_BASE}/repos/${repoPath}/commits`

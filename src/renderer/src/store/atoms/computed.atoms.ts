@@ -12,6 +12,7 @@ import { selectedChampionAtom, championDataAtom } from './champion.atoms'
 import { favoritesAtom, downloadedSkinsAtom } from './skin.atoms'
 import type { Champion, Skin } from '../../App'
 import { getChampionDisplayName } from '../../utils/championUtils'
+import { sanitizeFsName } from '../../../../shared/utils/skinFilename'
 
 // Helper function to check if a skin or any of its chromas are favorited
 function isSkinOrChromaFavorited(
@@ -223,7 +224,7 @@ export const downloadFilteredSkinsAtom = atom((get) => {
   const downloadedSkins = get(downloadedSkinsAtom)
 
   return skins.filter(({ champion, skin }) => {
-    const skinFileName = `${skin.nameEn || skin.name}.zip`.replace(/:/g, '')
+    const skinFileName = `${sanitizeFsName(skin.nameEn || skin.name)}.zip`
     const isDownloaded = downloadedSkins.some(
       (ds) => ds.championName === champion.key && ds.skinName === skinFileName
     )
@@ -330,7 +331,7 @@ export const skinStatsAtom = atom((get) => {
       champion.skins.forEach((skin) => {
         if (skin.num !== 0) {
           total++
-          const skinFileName = `${skin.nameEn || skin.name}.zip`.replace(/:/g, '')
+          const skinFileName = `${sanitizeFsName(skin.nameEn || skin.name)}.zip`
           if (
             downloadedSkins.some(
               (ds) => ds.championName === champion.key && ds.skinName === skinFileName

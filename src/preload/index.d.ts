@@ -282,6 +282,72 @@ export interface IApi {
   // App info
   getAppVersion: () => Promise<string>
 
+  // Repository management
+  repositoryGetAll: () => Promise<{
+    success: boolean
+    data?: Array<{
+      id: string
+      name: string
+      owner: string
+      repo: string
+      branch: string
+      skinsPath: string
+      isDefault: boolean
+      isCustom: boolean
+      status?: 'active' | 'error' | 'checking' | 'unchecked'
+    }>
+    error?: string
+  }>
+  repositoryGetActive: () => Promise<{
+    success: boolean
+    data?: {
+      id: string
+      name: string
+      owner: string
+      repo: string
+      branch: string
+      skinsPath: string
+      isDefault: boolean
+      isCustom: boolean
+    }
+    error?: string
+  }>
+  repositorySetActive: (repositoryId: string) => Promise<{ success: boolean; error?: string }>
+  repositoryAdd: (repository: {
+    name: string
+    owner: string
+    repo: string
+    branch: string
+    skinsPath: string
+  }) => Promise<{
+    success: boolean
+    data?: {
+      id: string
+      name: string
+      owner: string
+      repo: string
+      branch: string
+      skinsPath: string
+      isDefault: boolean
+      isCustom: boolean
+    }
+    error?: string
+  }>
+  repositoryRemove: (repositoryId: string) => Promise<{ success: boolean; error?: string }>
+  repositoryValidate: (
+    repositoryId: string
+  ) => Promise<{ success: boolean; data?: boolean; error?: string }>
+  repositoryUpdate: (
+    repositoryId: string,
+    updates: {
+      name?: string
+      owner?: string
+      repo?: string
+      branch?: string
+      skinsPath?: string
+    }
+  ) => Promise<{ success: boolean; error?: string }>
+
   // Repository URL construction
   repositoryConstructUrl: (
     championName: string,

@@ -352,7 +352,9 @@ export function useSkinManagement() {
                   champion.id // Pass championId for ID-based repositories
                 )
                 if (!urlResult.success || !urlResult.url) {
-                  throw new Error('Failed to construct download URL')
+                  throw new Error(
+                    `Failed to construct download URL for ${skin.name}: ${urlResult.error || 'unknown error'}`
+                  )
                 }
                 githubUrl = urlResult.url
 
@@ -369,7 +371,9 @@ export function useSkinManagement() {
                   champion.id // Pass championId for ID-based repositories
                 )
                 if (!urlResult.success || !urlResult.url) {
-                  throw new Error('Failed to construct download URL')
+                  throw new Error(
+                    `Failed to construct download URL for ${skin.name}: ${urlResult.error || 'unknown error'}`
+                  )
                 }
                 githubUrl = urlResult.url
 
