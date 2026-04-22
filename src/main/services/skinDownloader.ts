@@ -12,8 +12,9 @@ import { skinMetadataService } from './skinMetadataService'
 import { skinMigrationService } from './skinMigrationService'
 import { ModToolsWrapper } from './modToolsWrapper'
 import { repositoryService } from './repositoryService'
-import { LEAGUESKINS_REPO } from '../types/repository.types'
+import { SkinRepository } from '../types/repository.types'
 import { championDataService } from './championDataService'
+import { sanitizeFsName } from '../../shared/utils/skinFilename'
 
 interface BulkDownloadProgress {
   phase: 'downloading' | 'extracting' | 'processing' | 'completed'
@@ -87,13 +88,15 @@ export class SkinDownloader {
     // Parse GitHub URL to extract champion and skin name
     const skinInfo = this.parseGitHubUrl(url)
 
-    // Create champion folders (ensure champion name is properly decoded)
-    const decodedChampionName = decodeURIComponent(skinInfo.championName)
+    // Create champion folders (ensure champion name is properly decoded and sanitized)
+    const decodedChampionName = sanitizeFsName(decodeURIComponent(skinInfo.championName))
+    const sanitizedSkinName = sanitizeFsName(skinInfo.skinName.replace(/\.zip$/i, '')) + '.zip'
     const championCacheDir = path.join(this.cacheDir, decodedChampionName)
     await fs.mkdir(championCacheDir, { recursive: true })
 
     // Define paths
-    const zipPath = path.join(championCacheDir, skinInfo.skinName)
+    skinInfo.skinName = sanitizedSkinName
+    const zipPath = path.join(championCacheDir, sanitizedSkinName)
     skinInfo.localPath = zipPath
 
     // Check if already downloaded
@@ -202,7 +205,7 @@ export class SkinDownloader {
       throw new Error('Invalid GitHub URL format')
     }
 
-    const skinsPath = LEAGUESKINS_REPO.skinsPath
+    const skinsPath = repositoryService.getActiveRepository().skinsPath
 
     // Remove skins path prefix from the parsed path
     let relativePath = parsed.path
@@ -801,7 +804,7 @@ export class SkinDownloader {
     options: BulkDownloadOptions,
     onProgress?: BulkProgressCallback
   ): Promise<void> {
-    const repository = LEAGUESKINS_REPO
+    const repository = repositoryService.getActiveRepository()
     const tempDir = path.join(app.getPath('temp'), 'bocchi-bulk-download')
     const archivePath = path.join(tempDir, `${repository.repo}.tar.gz`)
     const extractPath = path.join(tempDir, 'extracted')
@@ -882,7 +885,7 @@ export class SkinDownloader {
 
   private async downloadRepositoryArchive(
     archivePath: string,
-    repository: typeof LEAGUESKINS_REPO,
+    repository: SkinRepository,
     onProgress?: (downloaded: number, total: number) => void
   ): Promise<void> {
     const url = `https://github.com/${repository.owner}/${repository.repo}/archive/refs/heads/${repository.branch}.tar.gz`
@@ -918,7 +921,7 @@ export class SkinDownloader {
   private async processSkins(
     skinsPath: string,
     options: BulkDownloadOptions,
-    _repository: typeof LEAGUESKINS_REPO,
+    _repository: SkinRepository,
     onProgress?: (
       processed: number,
       total: number,

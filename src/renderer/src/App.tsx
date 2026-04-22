@@ -573,7 +573,9 @@ function AppContent(): React.JSX.Element {
           champion.id // Pass championId for ID-based repositories
         )
         if (!urlResult.success || !urlResult.url) {
-          console.error('Failed to construct download URL for auto-selected skin')
+          console.error(
+            `Failed to construct download URL for ${randomSkin.name}: ${urlResult.error || 'unknown error'}`
+          )
           return
         }
         const githubUrl = urlResult.url

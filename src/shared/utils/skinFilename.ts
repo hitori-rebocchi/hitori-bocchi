@@ -6,12 +6,24 @@ export interface SkinNameInfo {
 }
 
 /**
+ * Sanitizes a string for use as a filesystem name on Windows.
+ * Replaces characters that are illegal in Windows filenames with a space,
+ * then collapses multiple spaces into one.
+ */
+export function sanitizeFsName(name: string): string {
+  return name
+    .replace(/[<>:"/\\|?*]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
  * Generates a consistent filename for a skin or chroma
  * This function ensures the same filename is generated whether downloading or checking status
  */
 export function generateSkinFilename(skin: SkinNameInfo): string {
   // Use the same priority order as the download logic
-  const baseName = (skin.nameEn || skin.name).replace(/:/g, '')
+  const baseName = sanitizeFsName(skin.nameEn || skin.name)
 
   if (skin.chromaId) {
     return `${baseName} ${skin.chromaId}.zip`
