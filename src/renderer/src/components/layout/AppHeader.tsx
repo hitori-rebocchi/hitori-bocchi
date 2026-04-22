@@ -1,5 +1,5 @@
-import { memo } from 'react'
-import { Heart } from 'lucide-react'
+import { memo, useState, useEffect } from 'react'
+import { Heart, GitBranch } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAtom, useAtomValue } from 'jotai'
 import { gamePathAtom } from '../../store/atoms/game.atoms'
@@ -31,6 +31,16 @@ export const AppHeader = memo(() => {
   const { fetchChampionData, isLoadingChampionData } = useChampionData()
 
   const loading = isLoadingChampionData
+
+  const [activeRepoName, setActiveRepoName] = useState<string>('')
+
+  useEffect(() => {
+    window.api.repositoryGetActive().then((result) => {
+      if (result.success && result.data) {
+        setActiveRepoName(result.data.name)
+      }
+    })
+  }, [])
 
   return (
     <div className="flex items-center justify-between px-8 py-5 bg-surface border-b-2 border-border shadow-sm dark:shadow-none">
@@ -103,6 +113,16 @@ export const AppHeader = memo(() => {
           inChampSelect={isInChampSelect}
           enabled={leagueClientEnabled && championDetectionEnabled}
         />
+        {activeRepoName && (
+          <div
+            className="flex items-center gap-1.5 px-3 py-2 text-xs bg-primary/5 text-primary border border-primary/20 rounded-lg cursor-pointer hover:bg-primary/10 transition-colors"
+            onClick={() => setShowSettingsDialog(true)}
+            title={t('nav.activeRepo', { name: activeRepoName })}
+          >
+            <GitBranch className="w-3.5 h-3.5" />
+            <span className="max-w-[120px] truncate">{activeRepoName}</span>
+          </div>
+        )}
         <button
           className="px-3 py-2.5 text-sm bg-surface hover:bg-secondary-100 dark:hover:bg-secondary-800 text-text-primary font-medium rounded-lg transition-all duration-200 border border-border hover:border-border-strong shadow-sm hover:shadow-md dark:shadow-none flex items-center gap-2"
           onClick={() => setShowSettingsDialog(true)}
