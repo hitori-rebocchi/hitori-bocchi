@@ -43,7 +43,8 @@
   "nav": {
     "favorites": "Favorites",
     "settings": "Settings",
-    "about": "About"
+    "about": "About",
+    "activeRepo": "Active repo: {{name}}"
   },
   "champion": {
     "searchPlaceholder": "Search champions",
@@ -270,11 +271,11 @@
       "removeSuccess": "Repository removed successfully",
       "removeError": "Failed to remove repository",
       "cannotRemoveActive": "Cannot remove the active repository. Please set another repository as active first",
-      "updateError": "Failed to update repository",
       "confirmRemove": "Are you sure you want to remove this repository?",
       "fillAllFields": "Please fill all fields",
       "addSuccess": "Repository added successfully",
       "addError": "Failed to add repository",
+      "skinsPath": "Skins Path",
       "status": {
         "valid": "Validated",
         "error": "Invalid",
@@ -302,6 +303,7 @@
         "owner": "GitHub Owner/Username",
         "repository": "Repository Name",
         "branch": "Branch",
+        "skinsPath": "Skins Path",
         "add": "Add Repository",
         "adding": "Adding..."
       }

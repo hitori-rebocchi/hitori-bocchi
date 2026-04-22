@@ -43,7 +43,8 @@
   "nav": {
     "favorites": "Favoritos",
     "settings": "Configuración",
-    "about": "Acerca de"
+    "about": "Acerca de",
+    "activeRepo": "Repo activo: {{name}}"
   },
   "champion": {
     "searchPlaceholder": "Buscar campeones",
@@ -273,6 +274,57 @@
     "autoExtractImages": {
       "title": "Extraer Imágenes de Vista Previa Automáticamente",
       "description": "Extrae automáticamente imágenes de vista previa de archivos WAD al importar skins (requiere herramientas de conversión)"
+    },
+    "repositories": {
+      "title": "Repositorios de Skins",
+      "description": "Administra las fuentes de repositorios de skins",
+      "addCustom": "Agregar Repositorio",
+      "setActive": "Activar",
+      "active": "Activo",
+      "default": "Por defecto",
+      "remove": "Eliminar",
+      "loadError": "Error al cargar los repositorios",
+      "setActiveSuccess": "Repositorio activado",
+      "setActiveError": "Error al activar el repositorio",
+      "removeSuccess": "Repositorio eliminado correctamente",
+      "removeError": "Error al eliminar el repositorio",
+      "cannotRemoveActive": "No se puede eliminar el repositorio activo. Activa otro repositorio primero",
+      "confirmRemove": "¿Estás seguro de que quieres eliminar este repositorio?",
+      "fillAllFields": "Por favor completa todos los campos",
+      "addSuccess": "Repositorio agregado correctamente",
+      "addError": "Error al agregar el repositorio",
+      "skinsPath": "Ruta de skins",
+      "status": {
+        "valid": "Validado",
+        "error": "Inválido",
+        "checking": "Verificando...",
+        "unchecked": "Sin validar"
+      },
+      "statusHelp": {
+        "valid": "Estructura del repositorio verificada - listo para usar",
+        "error": "Estructura del repositorio inválida o inaccesible",
+        "unchecked": "Haz clic en actualizar para validar el repositorio"
+      },
+      "validation": {
+        "checking": "Validando repositorio...",
+        "valid": "El repositorio es válido",
+        "invalid": "La estructura del repositorio es inválida",
+        "error": "Error al validar el repositorio"
+      },
+      "addDialog": {
+        "title": "Agregar Repositorio Personalizado",
+        "description": "Agrega un repositorio de GitHub que contenga skins de League of Legends",
+        "url": "URL del Repositorio de GitHub",
+        "urlHint": "Pega una URL de GitHub y los campos se llenarán automáticamente",
+        "or": "o ingresa manualmente",
+        "name": "Nombre del Repositorio",
+        "owner": "Dueño/Usuario de GitHub",
+        "repository": "Nombre del Repositorio",
+        "branch": "Rama",
+        "skinsPath": "Ruta de skins",
+        "add": "Agregar Repositorio",
+        "adding": "Agregando..."
+      }
     }
   },
   "tray": {
