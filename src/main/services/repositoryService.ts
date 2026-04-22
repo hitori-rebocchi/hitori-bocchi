@@ -324,16 +324,35 @@ export class RepositoryService {
     const { owner, repo, branch, skinsPath } = activeRepo
     const baseUrl = `https://github.com/${owner}/${repo}/blob/${branch}/${skinsPath}`
 
+    // Resolve English champion name (repos use English names, not localized)
+    let repoChampionName = championName
+    if (championId) {
+      const champion = championDataService.getChampionByIdSync(championId)
+      if (champion) {
+        repoChampionName = champion.nameEn || champion.name
+      }
+    }
+
+    // Sanitize names for repo paths (remove chars illegal in filenames: colons, etc.)
+    const sanitize = (s: string): string =>
+      s
+        .replace(/[<>:"/\\|?*]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+    const safeChampion = sanitize(repoChampionName)
+
     // Check if this is a chroma (has 4-6 digit numeric ID at end of filename)
     const chromaMatch = skinFile.match(/^(.+?)\s+(\d{4,6})\.zip$/i)
     if (chromaMatch) {
       const chromaId = chromaMatch[2]
-      const baseSkinName = chromaMatch[1]
+      const baseSkinName = sanitize(chromaMatch[1])
 
       // Look up chroma name from skin_ids.json
       const chromaName = this.getSkinNameById(chromaId)
       if (chromaName) {
-        return `${baseUrl}/${encodeURIComponent(championName)}/${encodeURIComponent(baseSkinName)}/${encodeURIComponent(chromaName)}/${encodeURIComponent(chromaName)}.zip`
+        const safeChromaName = sanitize(chromaName)
+        return `${baseUrl}/${encodeURIComponent(safeChampion)}/${encodeURIComponent(baseSkinName)}/${encodeURIComponent(safeChromaName)}/${encodeURIComponent(safeChromaName)}.zip`
       }
 
       // Fallback: try constructing from champion data
@@ -344,8 +363,9 @@ export class RepositoryService {
             if (skin.chromas && skin.chromaList) {
               const chroma = skin.chromaList.find((c) => c.id.toString() === chromaId)
               if (chroma) {
-                const fullChromaName = `${skin.nameEn || skin.name} (${chroma.name})`
-                return `${baseUrl}/${encodeURIComponent(championName)}/${encodeURIComponent(skin.nameEn || skin.name)}/${encodeURIComponent(fullChromaName)}/${encodeURIComponent(fullChromaName)}.zip`
+                const safeSkinName = sanitize(skin.nameEn || skin.name)
+                const fullChromaName = sanitize(`${skin.nameEn || skin.name} (${chroma.name})`)
+                return `${baseUrl}/${encodeURIComponent(safeChampion)}/${encodeURIComponent(safeSkinName)}/${encodeURIComponent(fullChromaName)}/${encodeURIComponent(fullChromaName)}.zip`
               }
             }
           }
@@ -358,8 +378,9 @@ export class RepositoryService {
     }
 
     // Regular skin - nested: skins/{champion}/{skinName}/{skinName}.zip
-    const skinName = skinFile.replace(/\.zip$/i, '')
-    return `${baseUrl}/${encodeURIComponent(championName)}/${encodeURIComponent(skinName)}/${encodeURIComponent(skinFile)}`
+    const skinName = sanitize(skinFile.replace(/\.zip$/i, ''))
+    const safeSkinFile = `${skinName}.zip`
+    return `${baseUrl}/${encodeURIComponent(safeChampion)}/${encodeURIComponent(skinName)}/${encodeURIComponent(safeSkinFile)}`
   }
 
   constructRawUrl(url: string): string {
