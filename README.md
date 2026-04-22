@@ -4,7 +4,7 @@
   <img src="./build/logo.png" alt="Bocchi Logo" width="128" height="128">
   
   [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-  [![Platform](https://img.shields.io/badge/platform-Windows-brightgreen.svg)](https://github.com/hoangvu12/bocchi/releases)
+  [![Platform](https://img.shields.io/badge/platform-Windows-brightgreen.svg)](https://github.com/hitori-rebocchi/hitori-bocchi/releases)
   [![Electron](https://img.shields.io/badge/electron-33.x-blue.svg)](https://www.electronjs.org/)
   [![React](https://img.shields.io/badge/react-19.x-61dafb.svg)](https://react.dev/)
   [![Discord](https://img.shields.io/discord/1234567890?color=5865F2&logo=discord&logoColor=white)](https://discord.gg/frXDBTe4FW)
@@ -36,9 +36,9 @@ Multi-repo functionality has been restored, allowing users to choose a repositor
 
 ### Download
 
-1. Go to the [Releases](https://github.com/hoangvu12/bocchi/releases) page
-2. Download the latest `Bocchi-Setup-x.x.x.exe`
-3. Run the installer and follow the setup wizard
+1. Go to the [Releases](https://github.com/hitori-rebocchi/hitori-bocchi/releases) page
+2. Download the latest `Bocchi-x.x.x-win-unpacked.zip`
+3. Extract and run `Bocchi.exe` (no installer needed)
 
 ## 🛠️ Development
 
@@ -52,7 +52,7 @@ Multi-repo functionality has been restored, allowing users to choose a repositor
 
 ```bash
 # Clone the repository
-git clone https://github.com/hoangvu12/bocchi.git
+git clone https://github.com/hitori-rebocchi/hitori-bocchi.git
 cd bocchi
 
 # Install dependencies
@@ -116,9 +116,9 @@ Use at your own risk. Skins are client-side only and do not provide any competit
 
 ## 📧 Contact
 
-- GitHub Issues: [Create an issue](https://github.com/hoangvu12/bocchi/issues)
+- GitHub Issues: [Create an issue](https://github.com/hitori-rebocchi/hitori-bocchi/issues)
 - Discord Server: [Join our community](https://discord.gg/frXDBTe4FW)
-- GitHub Repository: [Star on GitHub](https://github.com/hoangvu12/bocchi)
+- GitHub Repository: [Star on GitHub](https://github.com/hitori-rebocchi/hitori-bocchi)
 
 ## 💝 Support
 
