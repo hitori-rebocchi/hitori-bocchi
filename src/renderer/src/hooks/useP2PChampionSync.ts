@@ -5,7 +5,7 @@ import { lcuSelectedChampionAtom, isChampionLockedAtom } from '../store/atoms/lc
 import { championDetectionEnabledAtom, p2pAutoSyncEnabledAtom } from '../store/atoms/settings.atoms'
 import { p2pService } from '../services/p2pService'
 import type { AutoSyncedSkin, SelectedSkin } from '../store/atoms'
-import { sanitizeFsName } from '../../../shared/utils/skinFilename'
+import { sanitizeSkinNameForPath } from '../../../shared/utils/skinFilename'
 
 interface UseP2PChampionSyncProps {
   downloadedSkins: Array<{ championName: string; skinName: string; localPath?: string }>
@@ -166,8 +166,7 @@ function checkIfSkinDownloaded(
   }
 
   // Use the actual name for file checking
-  const actualName = skin.skinNameEn || skin.skinName
-  const baseName = sanitizeFsName(actualName)
+  const baseName = sanitizeSkinNameForPath(skin.skinNameEn || skin.skinName)
 
   if (skin.chromaId) {
     const chromaFileName = `${baseName} ${skin.chromaId}.zip`

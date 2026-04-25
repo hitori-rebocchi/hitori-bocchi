@@ -4,7 +4,7 @@ import { Champion, Skin } from '../App'
 import { type Chroma, type SelectedSkin } from '../store/atoms'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog'
 import { Button } from './ui/button'
-import { sanitizeFsName } from '../../../shared/utils/skinFilename'
+import { sanitizeSkinNameForPath } from '../../../shared/utils/skinFilename'
 
 interface ChromaSelectionDialogProps {
   open: boolean
@@ -45,7 +45,7 @@ export const ChromaSelectionDialog: React.FC<ChromaSelectionDialogProps> = ({
   }
 
   const isChromaDownloaded = (chromaId: string) => {
-    const chromaFileName = `${sanitizeFsName(skin.nameEn || skin.name)} ${chromaId}.zip`
+    const chromaFileName = `${sanitizeSkinNameForPath(skin.nameEn || skin.name)} ${chromaId}.zip`
     return downloadedSkins.some(
       (ds) => ds.championName === champion.key && ds.skinName === chromaFileName
     )

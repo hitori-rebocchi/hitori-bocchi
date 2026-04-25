@@ -10,6 +10,7 @@ import { selectedSkinsAtom } from '../store/atoms'
 import { downloadedSkinsAtom } from '../store/atoms/skin.atoms'
 import { currentQueueIdAtom } from '../store/atoms/lcu.atoms'
 import { PRESELECT_CHAMPION_QUEUE_IDS } from '../constants/queues'
+import { sanitizeSkinNameForPath } from '../../../shared/utils/skinFilename'
 
 export function usePatcherControl() {
   const { t } = useTranslation()
@@ -137,7 +138,7 @@ export function usePatcherControl() {
                 const downloadedSkin = downloadedSkins.find(
                   (ds) =>
                     ds.championName === skin.championKey &&
-                    ds.skinName.includes(skin.skinNameEn || skin.skinName)
+                    ds.skinName.includes(sanitizeSkinNameForPath(skin.skinNameEn || skin.skinName))
                 )
 
                 if (downloadedSkin) {

@@ -14,7 +14,7 @@ import { ModToolsWrapper } from './modToolsWrapper'
 import { repositoryService } from './repositoryService'
 import { SkinRepository } from '../types/repository.types'
 import { championDataService } from './championDataService'
-import { sanitizeFsName } from '../../shared/utils/skinFilename'
+import { sanitizeFsName, sanitizeSkinNameForPath } from '../../shared/utils/skinFilename'
 
 interface BulkDownloadProgress {
   phase: 'downloading' | 'extracting' | 'processing' | 'completed'
@@ -88,9 +88,12 @@ export class SkinDownloader {
     // Parse GitHub URL to extract champion and skin name
     const skinInfo = this.parseGitHubUrl(url)
 
-    // Create champion folders (ensure champion name is properly decoded and sanitized)
+    // Create champion folders (ensure champion name is properly decoded and sanitized).
+    // Champion names use space-replacement sanitization, but skin filenames must
+    // use sanitizeSkinNameForPath so K/DA-style names match GitHub URLs and lookups.
     const decodedChampionName = sanitizeFsName(decodeURIComponent(skinInfo.championName))
-    const sanitizedSkinName = sanitizeFsName(skinInfo.skinName.replace(/\.zip$/i, '')) + '.zip'
+    const sanitizedSkinName =
+      sanitizeSkinNameForPath(skinInfo.skinName.replace(/\.zip$/i, '')) + '.zip'
     const championCacheDir = path.join(this.cacheDir, decodedChampionName)
     await fs.mkdir(championCacheDir, { recursive: true })
 
@@ -254,7 +257,7 @@ export class SkinDownloader {
             const chroma = skin.chromaList.find((c) => c.id.toString() === chromaId)
             if (chroma) {
               // Use skin name + chroma ID format (same as name-based repos)
-              const baseSkinName = skin.nameEn || skin.name
+              const baseSkinName = sanitizeSkinNameForPath(skin.nameEn || skin.name)
               skinName = `${baseSkinName} ${chromaId}.zip`
               break
             }
@@ -299,7 +302,7 @@ export class SkinDownloader {
 
         const skin = champion.skins.find((s) => s.num === skinNum)
         if (skin) {
-          const baseSkinName = skin.nameEn || skin.name
+          const baseSkinName = sanitizeSkinNameForPath(skin.nameEn || skin.name)
           skinName = `${baseSkinName}.zip`
         }
       }
