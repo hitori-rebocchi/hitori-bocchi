@@ -8,11 +8,31 @@ export interface SkinNameInfo {
 /**
  * Sanitizes a string for use as a filesystem name on Windows.
  * Replaces characters that are illegal in Windows filenames with a space,
- * then collapses multiple spaces into one.
+ * then collapses multiple spaces into one. Used for arbitrary user-facing
+ * filenames (preset exports, champion folders) where space-replacement is
+ * preferable to deletion.
  */
 export function sanitizeFsName(name: string): string {
   return name
     .replace(/[<>:"/\\|?*]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Canonical sanitizer for ddragon skin names used as a path segment in either
+ * a GitHub URL or an on-disk filename. Drops chars that cannot appear in
+ * folder names (slashes, colons) instead of replacing them with a space, which
+ * mirrors how community LeagueSkins forks name their folders ("K/DA" → "KDA",
+ * "PROJECT: Yi" → "PROJECT Yi"). Year/variant parens stay intact.
+ *
+ * MUST be used everywhere a skin name is materialized — URL builder, on-disk
+ * filename, and the renderer's "is downloaded" lookup — so the three forms
+ * agree byte-for-byte.
+ */
+export function sanitizeSkinNameForPath(name: string): string {
+  return name
+    .replace(/[/\\:]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -23,7 +43,7 @@ export function sanitizeFsName(name: string): string {
  */
 export function generateSkinFilename(skin: SkinNameInfo): string {
   // Use the same priority order as the download logic
-  const baseName = sanitizeFsName(skin.nameEn || skin.name)
+  const baseName = sanitizeSkinNameForPath(skin.nameEn || skin.name)
 
   if (skin.chromaId) {
     return `${baseName} ${skin.chromaId}.zip`

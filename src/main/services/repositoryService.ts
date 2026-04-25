@@ -11,6 +11,7 @@ import {
 } from '../types/repository.types'
 import { settingsService } from './settingsService'
 import { championDataService } from './championDataService'
+import { sanitizeSkinNameForPath } from '../../shared/utils/skinFilename'
 
 export class RepositoryService {
   private static instance: RepositoryService
@@ -333,25 +334,28 @@ export class RepositoryService {
       }
     }
 
-    // Sanitize names for repo paths (remove chars illegal in filenames: colons, etc.)
-    const sanitize = (s: string): string =>
+    // Champion folder names use space-replacement sanitization (community repos
+    // mirror Riot's display name, e.g. "Kai'Sa" stays "Kai'Sa"). Skin name path
+    // segments must use sanitizeSkinNameForPath so "K/DA" → "KDA" matches the
+    // actual folder name in LeagueSkins-style repos.
+    const sanitizeChampion = (s: string): string =>
       s
         .replace(/[<>:"/\\|?*]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
 
-    const safeChampion = sanitize(repoChampionName)
+    const safeChampion = sanitizeChampion(repoChampionName)
 
     // Check if this is a chroma (has 4-6 digit numeric ID at end of filename)
     const chromaMatch = skinFile.match(/^(.+?)\s+(\d{4,6})\.zip$/i)
     if (chromaMatch) {
       const chromaId = chromaMatch[2]
-      const baseSkinName = sanitize(chromaMatch[1])
+      const baseSkinName = sanitizeSkinNameForPath(chromaMatch[1])
 
       // Look up chroma name from skin_ids.json
       const chromaName = this.getSkinNameById(chromaId)
       if (chromaName) {
-        const safeChromaName = sanitize(chromaName)
+        const safeChromaName = sanitizeSkinNameForPath(chromaName)
         return `${baseUrl}/${encodeURIComponent(safeChampion)}/${encodeURIComponent(baseSkinName)}/${encodeURIComponent(safeChromaName)}/${encodeURIComponent(safeChromaName)}.zip`
       }
 
@@ -363,8 +367,10 @@ export class RepositoryService {
             if (skin.chromas && skin.chromaList) {
               const chroma = skin.chromaList.find((c) => c.id.toString() === chromaId)
               if (chroma) {
-                const safeSkinName = sanitize(skin.nameEn || skin.name)
-                const fullChromaName = sanitize(`${skin.nameEn || skin.name} (${chroma.name})`)
+                const safeSkinName = sanitizeSkinNameForPath(skin.nameEn || skin.name)
+                const fullChromaName = sanitizeSkinNameForPath(
+                  `${skin.nameEn || skin.name} (${chroma.name})`
+                )
                 return `${baseUrl}/${encodeURIComponent(safeChampion)}/${encodeURIComponent(safeSkinName)}/${encodeURIComponent(fullChromaName)}/${encodeURIComponent(fullChromaName)}.zip`
               }
             }
@@ -378,7 +384,7 @@ export class RepositoryService {
     }
 
     // Regular skin - nested: skins/{champion}/{skinName}/{skinName}.zip
-    const skinName = sanitize(skinFile.replace(/\.zip$/i, ''))
+    const skinName = sanitizeSkinNameForPath(skinFile.replace(/\.zip$/i, ''))
     const safeSkinFile = `${skinName}.zip`
     return `${baseUrl}/${encodeURIComponent(safeChampion)}/${encodeURIComponent(skinName)}/${encodeURIComponent(safeSkinFile)}`
   }

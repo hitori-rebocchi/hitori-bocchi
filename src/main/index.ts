@@ -38,7 +38,7 @@ import { SkinInfo } from './types'
 import { PresetService } from './services/presetService'
 import { urlDownloadService } from './services/urlDownloadService'
 import { FileImportOptions } from './services/fileImportService'
-import { sanitizeFsName } from '../shared/utils/skinFilename'
+import { sanitizeSkinNameForPath } from '../shared/utils/skinFilename'
 import {
   SelectedSkin,
   PresetUpdate,
@@ -809,18 +809,20 @@ function setupIpcHandlers(): void {
           championIdMap.set(skin.championKey, skin.championId)
         }
         // Store the full context for each skin
-        const filename = skin.downloadedFilename || `${skin.skinNameEn || skin.skinName}.zip`
+        const sanitizedSkinName = sanitizeSkinNameForPath(skin.skinNameEn || skin.skinName)
+        const filename = skin.downloadedFilename || `${sanitizedSkinName}.zip`
         const skinKey = skin.chromaId
-          ? `${skin.championKey}/${skin.skinNameEn || skin.skinName} ${skin.chromaId}.zip`
+          ? `${skin.championKey}/${sanitizedSkinName} ${skin.chromaId}.zip`
           : `${skin.championKey}/${filename}`
         skinContextMap.set(skinKey, skin)
       }
 
       // Convert to skin keys format for processing
       const skinKeys = selectedSkins.map((skin) => {
-        const filename = skin.downloadedFilename || `${skin.skinNameEn || skin.skinName}.zip`
+        const sanitizedSkinName = sanitizeSkinNameForPath(skin.skinNameEn || skin.skinName)
+        const filename = skin.downloadedFilename || `${sanitizedSkinName}.zip`
         if (skin.chromaId) {
-          return `${skin.championKey}/${skin.skinNameEn || skin.skinName} ${skin.chromaId}.zip`
+          return `${skin.championKey}/${sanitizedSkinName} ${skin.chromaId}.zip`
         }
         return `${skin.championKey}/${filename}`
       })
@@ -976,7 +978,8 @@ function setupIpcHandlers(): void {
           // Check if the skin is already downloaded (list fetched once before the loop)
           const skinCtx = skinContextMap.get(skinKey)
           const properChampionName = skinCtx?.championName || champion
-          const sanitizedSkinFile = sanitizeFsName(skinFile.replace(/\.zip$/i, '')) + '.zip'
+          const sanitizedSkinFile =
+            sanitizeSkinNameForPath(skinFile.replace(/\.zip$/i, '')) + '.zip'
           const existingSkin = downloadedSkins.find(
             (ds) =>
               (ds.championName === champion ||
@@ -1155,7 +1158,7 @@ function setupIpcHandlers(): void {
             championIdMap.set(skin.championKey, skin.championId)
           }
           // Store the full context for each skin (build early for context lookup)
-          const skinNameToUse = sanitizeFsName(skin.skinNameEn || skin.skinName)
+          const skinNameToUse = sanitizeSkinNameForPath(skin.skinNameEn || skin.skinName)
           const skinNameWithChroma = skin.chromaId
             ? `${skinNameToUse} ${skin.chromaId}.zip`
             : `${skinNameToUse}.zip`
@@ -1181,7 +1184,7 @@ function setupIpcHandlers(): void {
           // Regular skins from repository
           // For chromas, append the chroma ID
           // Use proper name priority for downloading from repository: nameEn -> name
-          const skinNameToUse = sanitizeFsName(skin.skinNameEn || skin.skinName)
+          const skinNameToUse = sanitizeSkinNameForPath(skin.skinNameEn || skin.skinName)
           const skinNameWithChroma = skin.chromaId
             ? `${skinNameToUse} ${skin.chromaId}.zip`
             : `${skinNameToUse}.zip`
@@ -1304,7 +1307,8 @@ function setupIpcHandlers(): void {
             // Check if the skin is already downloaded (list fetched once before the loop)
             const skinCtx = skinContextMap.get(skinKey)
             const properChampionName = skinCtx?.championName || champion
-            const sanitizedSkinFile = sanitizeFsName(skinFile.replace(/\.zip$/i, '')) + '.zip'
+            const sanitizedSkinFile =
+              sanitizeSkinNameForPath(skinFile.replace(/\.zip$/i, '')) + '.zip'
             const existingSkin = downloadedSkins.find(
               (ds) =>
                 (ds.championName === champion ||
