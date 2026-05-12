@@ -7,8 +7,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use zip::ZipArchive;
 
+mod bin_parser;
 mod overlay;
 mod patcher;
+mod skin0_swap;
 
 #[derive(Parser)]
 #[command(
@@ -42,6 +44,17 @@ enum Command {
         /// One or more .fantome archive paths (pass `--mod` multiple times).
         #[arg(long = "mod", value_name = "FANTOME", required = true)]
         mods: Vec<String>,
+    },
+    /// Generate one or more skin0-swap .fantome archives from a champion WAD.
+    ///
+    /// Reads a JSON request from --request-json (or stdin if "-"). The request
+    /// matches the `GenerationRequest` struct (wadPath, champion, items[],
+    /// outputDir, author, hashtablePath). Outputs a JSON array of results on
+    /// stdout: each result has {success, skinNumber, outputPath?, sizeBytes?, error?}.
+    Fantonize {
+        /// Path to a JSON file with the request, or "-" to read from stdin.
+        #[arg(long)]
+        request_json: String,
     },
     /// Load cslol-dll.dll and run the patcher loop until stdin closes.
     ///
@@ -77,6 +90,7 @@ fn main() -> Result<()> {
             state,
             mods,
         } => overlay::build_overlay(&game, &overlay, &state, &mods),
+        Command::Fantonize { request_json } => cmd_fantonize(&request_json),
         Command::Patcher {
             dll,
             overlay_root,
@@ -85,6 +99,25 @@ fn main() -> Result<()> {
             flags,
         } => cmd_patcher(&dll, &overlay_root, log_file.as_deref(), timeout_ms, flags),
     }
+}
+
+fn cmd_fantonize(request_arg: &str) -> Result<()> {
+    let json_text = if request_arg == "-" {
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("reading request JSON from stdin")?;
+        buf
+    } else {
+        std::fs::read_to_string(request_arg)
+            .with_context(|| format!("reading request JSON from {}", request_arg))?
+    };
+    let request: skin0_swap::GenerationRequest =
+        serde_json::from_str(&json_text).context("parsing GenerationRequest JSON")?;
+    let results = skin0_swap::generate_fantomes(&request)?;
+    let out = serde_json::to_string(&results)?;
+    println!("{}", out);
+    Ok(())
 }
 
 fn cmd_info(path: &PathBuf) -> Result<()> {

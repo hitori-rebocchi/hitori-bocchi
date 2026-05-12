@@ -257,13 +257,17 @@ name = "bocchi-overlay"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "byteorder",
  "camino",
  "clap",
  "libloading",
  "ltk_fantome",
  "ltk_overlay",
+ "ltk_wad",
+ "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "xxhash-rust",
  "zip",
 ]
 
