@@ -38,7 +38,7 @@ import { LOCAL_FANTOME_ONLY_MODE } from '../shared/constants/features'
 import {
   generateFantomes as generateLocalFantomes,
   type GenerationRequest as LocalFantomeRequest
-} from './services/skin0SwapService'
+} from './services/fantonizeSidecar'
 import { listLocalChampions, listSkinsForChampion } from './services/localSkinMetadataService'
 import { hashtableService } from './services/hashtableService'
 import {
@@ -1713,8 +1713,10 @@ function setupIpcHandlers(): void {
         ...item,
         fileLabel: `${request.champion}_${item.fileLabel}`
       }))
+      await hashtableService.ensure()
       const written = await generateLocalFantomes(
         { ...request, items: itemsWithBocchiNames, outputDir: modFilesDir },
+        hashtableService.getFilePath(),
         (progress) => {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('local-fantome:progress', progress)
@@ -1812,6 +1814,7 @@ function setupIpcHandlers(): void {
           displayName = `${cleanSkinName} ${args.chromaIdLabel}`
         }
 
+        await hashtableService.ensure()
         const written = await generateLocalFantomes(
           {
             wadPath,
@@ -1826,6 +1829,7 @@ function setupIpcHandlers(): void {
             outputDir: modFilesDir,
             author
           },
+          hashtableService.getFilePath(),
           (progress) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('local-fantome:progress', progress)

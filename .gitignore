@@ -17,3 +17,7 @@ native/*/target/
 
 # Local-only technical notes (not for distribution)
 LOCAL_NOTES.md
+
+# Proprietary fantome generation algorithm (release-binary only)
+native/bocchi-overlay/src/skin0_swap_impl.rs
+.re-workspace/

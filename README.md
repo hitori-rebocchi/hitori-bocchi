@@ -14,10 +14,6 @@
 
 Bocchi is a modern, user-friendly desktop application for changing League of Legends skins. Built with Electron and React.
 
-## Multi-Repository Support
-
-Multi-repo functionality has been restored, allowing users to choose a repository with the skin list. This avoids dependency on Rose's project, which does not update skins in its public repository in order to prioritize its encrypted skins repository.
-
 ## ✨ Features
 
 - 🎨 **Browse & Download Skins** - Explore a vast collection of skins

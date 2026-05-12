@@ -10,15 +10,23 @@ publish = false
 name = "bocchi-overlay"
 path = "src/main.rs"
 
+[features]
+default = []
+private-impl = []
+
 [dependencies]
 anyhow = "1"
+byteorder = "1.5"
 camino = "1"
 clap = { version = "4", features = ["derive"] }
 libloading = "0.8"
 ltk_fantome = "0.5.1"
 ltk_overlay = "0.2.7"
+ltk_wad = "0.2"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
+xxhash-rust = { version = "0.8", features = ["xxh64"] }
 zip = "2.2"
 
 [profile.release]
