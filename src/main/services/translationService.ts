@@ -1,6 +1,6 @@
 import * as path from 'path'
 import * as fs from 'fs'
-import { app } from 'electron'
+import { isPackagedApp } from '../utils/isPackagedApp'
 
 export type LanguageCode = 'en_US' | 'vi_VN' | 'es_AR' | 'ja_JP' | 'ko_KR' | 'zh_CN' | 'ru_RU'
 
@@ -39,7 +39,7 @@ class TranslationService {
       // Get the path to the locales in the renderer directory
       let localesPath: string
 
-      if (app.isPackaged) {
+      if (isPackagedApp()) {
         // In production, translations should be in the renderer dist folder
         localesPath = path.join(__dirname, '../renderer/locales')
       } else {

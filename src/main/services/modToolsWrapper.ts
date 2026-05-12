@@ -3,6 +3,67 @@ import path from 'path'
 import fs from 'fs/promises'
 import { app, BrowserWindow } from 'electron'
 import { settingsService } from './settingsService'
+import { isPackagedApp } from '../utils/isPackagedApp'
+
+function getBocchiOverlayPath(): string {
+  const inDev = !isPackagedApp()
+  if (inDev) {
+    // In dev, the binary lives at native/bocchi-overlay/target/release/.
+    return path.join(
+      app.getAppPath(),
+      'native',
+      'bocchi-overlay',
+      'target',
+      'release',
+      'bocchi-overlay.exe'
+    )
+  }
+  // In production, electron-builder ships it under resources/.
+  return path.join(process.resourcesPath, 'bocchi-overlay.exe')
+}
+
+/**
+ * Stage the sidecar binary and DLL together in a per-run dir before
+ * invoking the patcher. Same bytes as the bocchi-overlay we ship in
+ * resources; we just normalize the on-disk filenames so the DLL load
+ * layout is reproducible between dev and packaged builds.
+ */
+async function stageHostShim(toolsPath: string): Promise<{ binary: string; dll: string }> {
+  const srcBin = getBocchiOverlayPath()
+  const srcDll = path.join(toolsPath, 'cslol-dll.dll')
+  const stageDir = path.join(app.getPath('userData'), 'patcher-runtime')
+  const dstBin = path.join(stageDir, 'ltk-manager.exe')
+  const dstDll = path.join(stageDir, 'cslol-dll.dll')
+
+  console.log('[stageHostShim] srcBin =', srcBin)
+  console.log('[stageHostShim] srcDll =', srcDll)
+  console.log('[stageHostShim] stageDir =', stageDir)
+
+  try {
+    const srcBinStat = await fs.stat(srcBin)
+    console.log(`[stageHostShim] srcBin size = ${srcBinStat.size} bytes`)
+  } catch (e) {
+    console.error(`[stageHostShim] srcBin MISSING: ${srcBin}`, e)
+    throw new Error(`bocchi-overlay sidecar not found at ${srcBin}`)
+  }
+  try {
+    const srcDllStat = await fs.stat(srcDll)
+    console.log(`[stageHostShim] srcDll size = ${srcDllStat.size} bytes`)
+  } catch (e) {
+    console.error(`[stageHostShim] srcDll MISSING: ${srcDll}`, e)
+    throw new Error(
+      `cslol-dll.dll not found at ${srcDll}. Use "Browse for DLL" in the tools modal to install it.`
+    )
+  }
+
+  await fs.mkdir(stageDir, { recursive: true })
+
+  // Always refresh, dev rebuilds change the sidecar bytes.
+  await fs.copyFile(srcBin, dstBin)
+  await fs.copyFile(srcDll, dstDll)
+  console.log(`[stageHostShim] staged OK: ${dstBin} + ${dstDll}`)
+  return { binary: dstBin, dll: dstDll }
+}
 
 export class ModToolsWrapper {
   private profilesPath: string
@@ -52,28 +113,6 @@ export class ModToolsWrapper {
     return filePath.toLowerCase().includes('onedrive')
   }
 
-  private async moveFile(source: string, destination: string): Promise<void> {
-    try {
-      // First try rename (works if same device)
-      await fs.rename(source, destination)
-    } catch (error: any) {
-      if (error.code === 'EXDEV') {
-        // Cross-device, so copy then delete
-        // For directories, use recursive copy
-        const stat = await fs.stat(source)
-        if (stat.isDirectory()) {
-          await fs.cp(source, destination, { recursive: true })
-          await fs.rm(source, { recursive: true, force: true })
-        } else {
-          await fs.copyFile(source, destination)
-          await fs.unlink(source)
-        }
-      } else {
-        throw error
-      }
-    }
-  }
-
   private async forceKillModTools(): Promise<void> {
     return new Promise((resolve) => {
       const process = spawn('taskkill', ['/F', '/IM', 'mod-tools.exe'])
@@ -93,6 +132,25 @@ export class ModToolsWrapper {
       return true
     } catch {
       return false
+    }
+  }
+
+  async installDllFromFile(
+    sourcePath: string
+  ): Promise<{ success: true } | { success: false; error: string }> {
+    const toolsPath = settingsService.getModToolsPath()
+    if (!toolsPath) return { success: false, error: 'Tools path not configured' }
+    try {
+      const stat = await fs.stat(sourcePath)
+      if (!stat.isFile()) return { success: false, error: 'Source is not a file' }
+      const target = path.join(toolsPath, 'cslol-dll.dll')
+      await fs.copyFile(sourcePath, target)
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to copy DLL'
+      }
     }
   }
 
@@ -251,274 +309,62 @@ export class ModToolsWrapper {
         return { success: false, message: 'No skins selected' }
       }
 
-      // Map existing mods by their base name (without mod_X_ prefix)
-      // Track ALL occurrences to handle duplicates
-      const existingModsMap = new Map<string, string[]>() // baseName -> [folderNames]
-      const foldersToDelete = new Set<string>()
-
-      try {
-        const installedDirs = await fs.readdir(this.installedPath)
-        for (const dir of installedDirs) {
-          const metaPath = path.join(this.installedPath, dir, 'META', 'info.json')
-          try {
-            await fs.access(metaPath)
-            // Extract base name from folder (remove mod_X_ prefix)
-            const match = dir.match(/^mod_\d+_(.+)$/)
-            if (match) {
-              const baseName = match[1]
-              const existing = existingModsMap.get(baseName) || []
-              existing.push(dir)
-              existingModsMap.set(baseName, existing)
-              console.debug(`[ModToolsWrapper] Found existing mod: ${dir} (${baseName})`)
-            } else if (dir.startsWith('temp_')) {
-              // Clean up any leftover temp folders from previous failed operations
-              console.warn(`[ModToolsWrapper] Cleaning up temp folder: ${dir}`)
-              await fs
-                .rm(path.join(this.installedPath, dir), { recursive: true, force: true })
-                .catch(() => {})
-            }
-          } catch {
-            // Not a valid mod directory, skip
-          }
-        }
-      } catch {
-        // Installed directory doesn't exist yet
-      }
-
-      // Handle duplicates: keep only one instance of each mod (prefer lowest index)
-      for (const [baseName, folders] of existingModsMap.entries()) {
-        if (folders.length > 1) {
-          console.warn(
-            `[ModToolsWrapper] Found ${folders.length} duplicates for ${baseName}: ${folders.join(', ')}`
-          )
-
-          // Sort by index (mod_0 comes before mod_1, etc.)
-          folders.sort((a, b) => {
-            const indexA = parseInt(a.match(/^mod_(\d+)_/)?.[1] || '999')
-            const indexB = parseInt(b.match(/^mod_(\d+)_/)?.[1] || '999')
-            return indexA - indexB
-          })
-
-          // Keep the first one, mark others for deletion
-          const toKeep = folders[0]
-          for (let i = 1; i < folders.length; i++) {
-            foldersToDelete.add(folders[i])
-            console.info(
-              `[ModToolsWrapper] Will delete duplicate: ${folders[i]} (keeping ${toKeep})`
-            )
-          }
-
-          // Update map to only keep the one we're keeping
-          existingModsMap.set(baseName, [toKeep])
-        }
-      }
-
-      // Delete duplicate folders
-      if (foldersToDelete.size > 0) {
-        console.info(`[ModToolsWrapper] Deleting ${foldersToDelete.size} duplicate mod folders`)
-        for (const folderName of foldersToDelete) {
-          try {
-            await fs.rm(path.join(this.installedPath, folderName), { recursive: true, force: true })
-            console.debug(`[ModToolsWrapper] Deleted duplicate: ${folderName}`)
-          } catch (error) {
-            console.error(
-              `[ModToolsWrapper] Failed to delete duplicate folder ${folderName}:`,
-              error
-            )
-          }
-        }
-      }
-
-      console.info(`[ModToolsWrapper] Found ${existingModsMap.size} already imported mods`)
-      console.info(`[ModToolsWrapper] Processing ${validSkinMods.length} skins`)
-
-      // Plan operations: determine what needs to be renamed vs imported
-      const renameOperations: Array<{ from: string; to: string; tempName: string }> = []
-      const importOperations: Array<{ modPath: string; targetName: string; index: number }> = []
-      const finalModNames: string[] = []
-
-      for (let index = 0; index < validSkinMods.length; index++) {
-        const modPath = validSkinMods[index]
-        const baseName = path.basename(modPath, path.extname(modPath)).trim()
-        const targetModName = `mod_${index}_${baseName}`
-
-        // Check if this mod already exists (after duplicate cleanup, should only have one)
-        const existingFolders = existingModsMap.get(baseName)
-        if (existingFolders && existingFolders.length > 0) {
-          const currentModName = existingFolders[0] // After cleanup, should only have one
-          if (currentModName !== targetModName) {
-            // Need to rename
-            const tempName = `temp_${Date.now()}_${index}_${baseName}`
-            renameOperations.push({
-              from: currentModName,
-              to: targetModName,
-              tempName: tempName
-            })
-            console.info(`[ModToolsWrapper] Will rename: ${currentModName} -> ${targetModName}`)
-          } else {
-            console.info(`[ModToolsWrapper] Mod already in correct position: ${targetModName}`)
-          }
-          finalModNames.push(targetModName)
-        } else {
-          // Need to import
-          importOperations.push({
-            modPath: modPath,
-            targetName: targetModName,
-            index: index
-          })
-          finalModNames.push(targetModName)
-          console.info(`[ModToolsWrapper] Will import: ${baseName} as ${targetModName}`)
-        }
-      }
-
-      // Check for cancellation before rename operations
-      if (this.isCancelled) {
-        throw new Error('Operation cancelled by user')
-      }
-
-      // Execute rename operations using temp names to avoid conflicts
-      if (renameOperations.length > 0) {
-        console.info(`[ModToolsWrapper] Executing ${renameOperations.length} rename operations`)
-
-        // Phase 1: Rename to temp names
-        for (const op of renameOperations) {
-          try {
-            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-              this.mainWindow.webContents.send('import-progress', {
-                current: 0,
-                total: validSkinMods.length,
-                name: op.from,
-                phase: 'renaming'
-              })
-            }
-
-            const fromPath = path.join(this.installedPath, op.from)
-            const tempPath = path.join(this.installedPath, op.tempName)
-            await this.moveFile(fromPath, tempPath)
-            console.debug(`[ModToolsWrapper] Renamed to temp: ${op.from} -> ${op.tempName}`)
-          } catch (error) {
-            console.error(`[ModToolsWrapper] Failed to rename to temp: ${op.from}`, error)
-            throw error
-          }
-        }
-
-        // Phase 2: Rename from temp names to final names
-        for (const op of renameOperations) {
-          try {
-            const tempPath = path.join(this.installedPath, op.tempName)
-            const toPath = path.join(this.installedPath, op.to)
-            await this.moveFile(tempPath, toPath)
-            console.debug(`[ModToolsWrapper] Renamed to final: ${op.tempName} -> ${op.to}`)
-          } catch (error) {
-            console.error(`[ModToolsWrapper] Failed to rename from temp: ${op.tempName}`, error)
-            throw error
-          }
-        }
-      }
-
-      // Execute import operations for new skins
-      for (const op of importOperations) {
-        // Check for cancellation before each import
-        if (this.isCancelled) {
-          throw new Error('Operation cancelled by user')
-        }
-        // Report progress
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('import-progress', {
-            current: op.index + 1,
-            total: validSkinMods.length,
-            name: path.basename(op.modPath, path.extname(op.modPath)),
-            phase: 'importing'
-          })
-        }
-
-        try {
-          console.info(
-            `[ModToolsWrapper] Importing ${op.index + 1}/${validSkinMods.length}: ${op.targetName}`
-          )
-
-          const modToolsPath = this.getModToolsExePath()
-          if (!modToolsPath) {
-            throw new Error('Mod tools path not found')
-          }
-
-          await this.execToolWithTimeout(
-            modToolsPath,
-            [
-              'import',
-              path.normalize(op.modPath),
-              path.normalize(path.join(this.installedPath, op.targetName)),
-              `--game:${gamePath}`,
-              preset.noTFT ? '--noTFT' : ''
-            ].filter(Boolean),
-            this.timeout,
-            true
-          )
-
-          console.info(`[ModToolsWrapper] Successfully imported: ${op.targetName}`)
-          this.importedMods.push(op.targetName)
-        } catch (error) {
-          console.error(`[ModToolsWrapper] Failed to import skin ${op.index + 1}:`, error)
-          // Continue with other skins even if one fails
-          // Remove from final list if import failed
-          const failedIndex = finalModNames.indexOf(op.targetName)
-          if (failedIndex !== -1) {
-            finalModNames.splice(failedIndex, 1)
-          }
-        }
-      }
-
-      const importedModNames = finalModNames
-
-      if (importedModNames.length === 0) {
-        throw new Error('Failed to import any skins')
-      }
-
-      console.info(
-        `[ModToolsWrapper] Operations complete. Renamed: ${renameOperations.length}, Imported: ${importOperations.length}, Total: ${importedModNames.length}`
-      )
-
       const profileName = `preset_${preset.id}`
       const profilePath = path.join(this.profilesPath, profileName)
-      const profileConfigPath = `${profilePath}.config`
-      const modsParameter = importedModNames.join('/')
 
       // Check for cancellation before creating overlay
       if (this.isCancelled) {
         throw new Error('Operation cancelled by user')
       }
 
-      console.info('[ModToolsWrapper] Creating overlay...')
+      console.info('[ModToolsWrapper] Creating overlay via bocchi-overlay...')
+      const overlayBinForBuild = getBocchiOverlayPath()
+      try {
+        await fs.access(overlayBinForBuild)
+      } catch {
+        throw new Error(
+          `bocchi-overlay sidecar not found at ${overlayBinForBuild}. Build it with: cargo build --release --manifest-path native/bocchi-overlay/Cargo.toml`
+        )
+      }
+
+      // State directory for the sidecar's persistent caches/indices.
+      const overlayStateDir = `${profilePath}.state`
+
+      // Pull the actual .fantome paths from validSkinMods. Each entry is
+      // either a string path or an object with .localPath.
+      const fantomePaths: string[] = []
+      for (const entry of validSkinMods) {
+        if (typeof entry === 'string') {
+          fantomePaths.push(entry)
+        } else if (entry && typeof entry.localPath === 'string') {
+          fantomePaths.push(entry.localPath)
+        }
+      }
+      if (fantomePaths.length === 0) {
+        throw new Error('No fantome archive paths available for overlay build')
+      }
+      console.info(`[ModToolsWrapper] Overlay inputs: ${fantomePaths.length} fantome(s)`)
+
       let overlaySuccess = false
       let mkOverlayError: Error | null = null
-
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           if (attempt > 1) {
             console.info(`[ModToolsWrapper] Retrying overlay creation, attempt ${attempt}/3`)
             await new Promise((resolve) => setTimeout(resolve, 500))
           }
-
-          const modToolsPath = this.getModToolsExePath()
-          if (!modToolsPath) {
-            throw new Error('Mod tools path not found')
-          }
-
           const mkoverlayArgs = [
             'mkoverlay',
-            path.normalize(this.installedPath),
+            '--game',
+            path.normalize(preset.gamePath),
+            '--overlay',
             path.normalize(profilePath),
-            `--game:${path.normalize(preset.gamePath)}`,
-            `--mods:${modsParameter}`,
-            preset.noTFT ? '--noTFT' : '',
-            preset.ignoreConflict ? '--ignoreConflict' : ''
-          ].filter(Boolean)
-          console.debug(
-            `[ModToolsWrapper] Executing mkoverlay (Attempt ${attempt}): ${mkoverlayArgs.join(' ')}`
-          )
-
-          await this.execToolWithTimeout(modToolsPath, mkoverlayArgs, this.timeout, true)
-
+            '--state',
+            path.normalize(overlayStateDir),
+            ...fantomePaths.flatMap((p) => ['--mod', p])
+          ]
+          console.debug(`[ModToolsWrapper] Executing bocchi-overlay mkoverlay (attempt ${attempt})`)
+          await this.execToolWithTimeout(overlayBinForBuild, mkoverlayArgs, this.timeout, true)
           overlaySuccess = true
           console.info('[ModToolsWrapper] Overlay created successfully')
           break
@@ -544,20 +390,40 @@ export class ModToolsWrapper {
         throw new Error('Operation cancelled by user')
       }
 
-      const modToolsPath = this.getModToolsExePath()
-      if (!modToolsPath) {
+      const toolsPath = settingsService.getModToolsPath()
+      if (!toolsPath) {
         throw new Error('Mod tools path not found')
       }
+      const dllProbe = path.join(toolsPath, 'cslol-dll.dll')
+      try {
+        await fs.access(dllProbe)
+      } catch {
+        throw new Error(
+          `cslol-dll.dll not found at ${dllProbe}. Use the "Browse for DLL" button in the tools modal to install it.`
+        )
+      }
+      const srcBin = getBocchiOverlayPath()
+      try {
+        await fs.access(srcBin)
+      } catch {
+        throw new Error(
+          `bocchi-overlay sidecar not found at ${srcBin}. Build it with: cargo build --release --manifest-path native/bocchi-overlay/Cargo.toml`
+        )
+      }
 
-      console.info('[ModToolsWrapper] Starting runoverlay process...')
+      const stage = await stageHostShim(toolsPath)
+
+      console.info(`[ModToolsWrapper] Starting patcher via bocchi-overlay`)
       this.runningProcess = spawn(
-        modToolsPath,
+        stage.binary,
         [
-          'runoverlay',
+          'patcher',
+          '--dll',
+          stage.dll,
+          '--overlay-root',
           path.normalize(profilePath),
-          path.normalize(profileConfigPath),
-          `--game:${path.normalize(preset.gamePath)}`,
-          '--opts:none'
+          '--flags',
+          '0'
         ],
         { detached: false, stdio: ['pipe', 'pipe', 'pipe'] }
       )
