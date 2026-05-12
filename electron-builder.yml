@@ -26,10 +26,23 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # The Rust sidecar's target/ directory is ~2.3 GB of build artifacts
+  # (incrementals, dep sources, debug builds). Only the final exe is needed,
+  # and that ships via `extraResources` below.
+  - '!native/**'
 asarUnpack:
   - resources/**
+extraResources:
+  # Native Rust sidecar — build with:
+  #   cargo build --release --manifest-path native/bocchi-overlay/Cargo.toml
+  # Resolves to `process.resourcesPath/bocchi-overlay.exe` at runtime.
+  - from: native/bocchi-overlay/target/release/bocchi-overlay.exe
+    to: bocchi-overlay.exe
 win:
-  executableName: Bocchi
+  # Keep dev and packaged builds running under the same host binary name
+  # so native sidecars behave identically in both. User-facing shortcut
+  # name comes from nsis.shortcutName below.
+  executableName: electron
   target:
     - nsis
   icon: build/icon.ico

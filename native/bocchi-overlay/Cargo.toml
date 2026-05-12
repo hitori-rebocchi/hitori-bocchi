@@ -1,0 +1,27 @@
+[package]
+name = "bocchi-overlay"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Bocchi sidecar that reads .fantome / .modpkg archives and builds League mod overlays"
+publish = false
+
+[[bin]]
+name = "bocchi-overlay"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+camino = "1"
+clap = { version = "4", features = ["derive"] }
+libloading = "0.8"
+ltk_fantome = "0.5.1"
+ltk_overlay = "0.2.7"
+serde_json = "1"
+thiserror = "1"
+zip = "2.2"
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

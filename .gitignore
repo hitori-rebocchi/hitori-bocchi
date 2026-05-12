@@ -11,3 +11,9 @@ out
 source-codes/
 test-tools/
 test-output/
+
+# Rust sidecar build artifacts (sources are tracked, builds are not)
+native/*/target/
+
+# Local-only technical notes (not for distribution)
+LOCAL_NOTES.md
