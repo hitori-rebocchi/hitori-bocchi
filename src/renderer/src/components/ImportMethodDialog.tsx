@@ -8,6 +8,7 @@ import { Input } from './ui/input'
 import { toast } from 'sonner'
 import { useSetAtom } from 'jotai'
 import { isDraggingAtom } from '../store/atoms/ui.atoms'
+import { LOCAL_FANTOME_ONLY_MODE } from '../../../shared/constants/features'
 
 interface ImportMethodDialogProps {
   open: boolean
@@ -186,15 +187,19 @@ export const ImportMethodDialog: React.FC<ImportMethodDialogProps> = ({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList
+            className={`grid w-full ${LOCAL_FANTOME_ONLY_MODE ? 'grid-cols-1' : 'grid-cols-2'}`}
+          >
             <TabsTrigger value="file" className="flex items-center gap-2">
               <Upload className="h-4 w-4" />
               {t('importMethod.fileTab')}
             </TabsTrigger>
-            <TabsTrigger value="url" className="flex items-center gap-2">
-              <Link className="h-4 w-4" />
-              {t('importMethod.urlTab')}
-            </TabsTrigger>
+            {!LOCAL_FANTOME_ONLY_MODE && (
+              <TabsTrigger value="url" className="flex items-center gap-2">
+                <Link className="h-4 w-4" />
+                {t('importMethod.urlTab')}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="file" className="space-y-4">

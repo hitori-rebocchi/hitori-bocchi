@@ -171,7 +171,52 @@ const api = {
     return () => ipcRenderer.removeListener('tools-download-details', handler)
   },
   checkDllExist: () => ipcRenderer.invoke('check-dll-exist'),
+  installDllFromFile: () => ipcRenderer.invoke('install-dll-from-file'),
   openToolsFolder: () => ipcRenderer.invoke('open-tools-folder'),
+
+  // Local fantome generation (read user's WAD, emit .fantome — no Riot assets bundled)
+  localFantomeListChampions: (leagueDir: string) =>
+    ipcRenderer.invoke('local-fantome:list-champions', leagueDir),
+  localFantomeListSkins: (wadPath: string) =>
+    ipcRenderer.invoke('local-fantome:list-skins', wadPath),
+  localFantomeGenerate: (request: {
+    wadPath: string
+    champion: string
+    items: Array<{ skinNumber: number; fileLabel: string; displayName: string }>
+    outputDir: string
+    author: string
+  }) => ipcRenderer.invoke('local-fantome:generate', request),
+  localFantomeGenerateForSkin: (args: {
+    championKey: string
+    skinNum: number
+    skinName: string
+    author: string
+    leagueDir?: string
+    chromaIndex?: number
+    chromaIdLabel?: string
+  }) => ipcRenderer.invoke('local-fantome:generate-for-skin', args),
+  localFantomeHashtableStatus: () => ipcRenderer.invoke('local-fantome:hashtable-status'),
+  localFantomeHashtableDownload: () => ipcRenderer.invoke('local-fantome:hashtable-download'),
+  onLocalFantomeProgress: (
+    callback: (p: {
+      current: number
+      total: number
+      skinNumber: number
+      message: string
+      success: boolean | null
+    }) => void
+  ) => {
+    const handler = (_: IpcRendererEvent, p: any) => callback(p)
+    ipcRenderer.on('local-fantome:progress', handler)
+    return () => ipcRenderer.removeListener('local-fantome:progress', handler)
+  },
+  onLocalFantomeHashtableProgress: (
+    callback: (p: { loaded: number; total: number; percent: number }) => void
+  ) => {
+    const handler = (_: IpcRendererEvent, p: any) => callback(p)
+    ipcRenderer.on('local-fantome:hashtable-progress', handler)
+    return () => ipcRenderer.removeListener('local-fantome:hashtable-progress', handler)
+  },
 
   // Window controls
   minimizeWindow: () => ipcRenderer.send('window-minimize'),

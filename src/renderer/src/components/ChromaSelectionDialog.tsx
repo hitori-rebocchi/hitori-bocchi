@@ -22,6 +22,13 @@ interface ChromaSelectionDialogProps {
     chromaId: string,
     chromaName: string
   ) => void
+  /**
+   * Called when the user clicks a chroma that has no local .fantome yet.
+   * Receives the chroma's index inside `chromas` so the backend can resolve
+   * the WAD skinNumber for the Nth chroma of the base skin. If absent,
+   * dimmed chroma clicks fall through to onChromaSelect.
+   */
+  onGenerateChroma?: (champion: Champion, skin: Skin, chromaId: string, chromaIndex: number) => void
 }
 
 export const ChromaSelectionDialog: React.FC<ChromaSelectionDialogProps> = ({
@@ -34,7 +41,8 @@ export const ChromaSelectionDialog: React.FC<ChromaSelectionDialogProps> = ({
   downloadedSkins,
   onChromaSelect,
   favorites,
-  onToggleChromaFavorite
+  onToggleChromaFavorite,
+  onGenerateChroma
 }) => {
   const { t } = useTranslation()
   const isChromaSelected = (chromaId: number) => {
@@ -44,11 +52,32 @@ export const ChromaSelectionDialog: React.FC<ChromaSelectionDialogProps> = ({
     )
   }
 
-  const isChromaDownloaded = (chromaId: string) => {
-    const chromaFileName = `${sanitizeSkinNameForPath(skin.nameEn || skin.name)} ${chromaId}.zip`
-    return downloadedSkins.some(
-      (ds) => ds.championName === champion.key && ds.skinName === chromaFileName
-    )
+  const isChromaDownloaded = (chromaId: string): boolean => {
+    // Match the chroma's on-disk name under either the EN or localized skin
+    // name — handleGenerateChroma pins new files to nameEn||name but legacy
+    // generates may have used the localized form.
+    const bases = [skin.nameEn, skin.name]
+      .filter((n): n is string => Boolean(n && n.trim()))
+      .map((n) => sanitizeSkinNameForPath(n))
+    for (const base of bases) {
+      const repoZipName = `${base} ${chromaId}.zip`
+      if (
+        downloadedSkins.some(
+          (ds) => ds.championName === champion.key && ds.skinName === repoZipName
+        )
+      ) {
+        return true
+      }
+      const userSuffix = `${base} ${chromaId}`
+      const exts = ['fantome', 'zip', 'wad', 'wad.client']
+      const userNames = new Set(exts.map((e) => `[User] ${userSuffix}.${e}`))
+      if (
+        downloadedSkins.some((ds) => ds.championName === champion.key && userNames.has(ds.skinName))
+      ) {
+        return true
+      }
+    }
+    return false
   }
 
   const isChromaFavorite = (chromaId: number) => {
@@ -67,9 +96,10 @@ export const ChromaSelectionDialog: React.FC<ChromaSelectionDialogProps> = ({
 
         <div className="flex-1 overflow-y-auto pr-2">
           <div className="space-y-2 p-1">
-            {chromas.map((chroma) => {
+            {chromas.map((chroma, chromaIndex) => {
               const isSelected = isChromaSelected(chroma.id)
               const isDownloaded = isChromaDownloaded(chroma.id.toString())
+              const dimmed = !isDownloaded && !isSelected
 
               return (
                 <div
@@ -78,8 +108,13 @@ export const ChromaSelectionDialog: React.FC<ChromaSelectionDialogProps> = ({
                     isSelected
                       ? 'bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-500'
                       : 'bg-surface border-2 border-border hover:border-primary-400 hover:bg-secondary-100 dark:hover:bg-secondary-800'
-                  }`}
+                  } ${dimmed ? 'opacity-50 hover:opacity-90' : ''}`}
                   onClick={() => {
+                    if (!isDownloaded && !isSelected && onGenerateChroma) {
+                      onGenerateChroma(champion, skin, chroma.id.toString(), chromaIndex)
+                      onOpenChange(false)
+                      return
+                    }
                     onChromaSelect(champion, skin, chroma.id.toString())
                     onOpenChange(false)
                   }}

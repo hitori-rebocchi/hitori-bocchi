@@ -13,7 +13,7 @@ import {
 } from '../store/atoms/game.atoms'
 import { selectedSkinsAtom } from '../store/atoms'
 import { getChampionDisplayName } from '../utils/championUtils'
-import { generateSkinFilename } from '../../../shared/utils/skinFilename'
+import { generateSkinFilename, sanitizeSkinNameForPath } from '../../../shared/utils/skinFilename'
 import type { Champion, Skin } from '../App'
 
 export function useSkinManagement() {
@@ -272,10 +272,11 @@ export function useSkinManagement() {
             selectedSkin.skinId.startsWith('custom_[User] ')
           ) {
             if (selectedSkin.championKey === 'Custom') {
-              // Old format: Custom champion
+              // Old format: Custom champion. Sanitize the probe — on-disk
+              // basenames drop "/" and ":" so K/DA-style raw names won't match.
+              const sanitizedProbe = sanitizeSkinNameForPath(selectedSkin.skinName)
               const userMod = downloadedSkins.find(
-                (ds) =>
-                  ds.skinName.includes('[User]') && ds.skinName.includes(selectedSkin.skinName)
+                (ds) => ds.skinName.includes('[User]') && ds.skinName.includes(sanitizedProbe)
               )
               if (userMod) {
                 skinKeys.push(`${userMod.championName}/${userMod.skinName}`)
@@ -332,9 +333,29 @@ export function useSkinManagement() {
             console.log(`  Generated filename: ${skinFileName}`)
           }
 
-          // Check if skin is already downloaded
+          // Check if skin is already downloaded. Accepted shapes:
+          //   - repo-downloaded:        ds.skinName === "Pool Party Sion.zip"
+          //   - locally generated:      ds.skinName === "[User] Pool Party Sion.fantome"
+          //   - manually imported zip:  ds.skinName === "[User] Pool Party Sion.zip"
+          // The fantome may have been generated under a different UI locale
+          // (legacy bug: localized name on disk), so accept both the EN and
+          // localized basenames.
+          const baseFileName = skinFileName.replace(/\.zip$/i, '')
+          const exts = ['fantome', 'zip', 'wad', 'wad.client']
+          const baseNames = new Set<string>([baseFileName])
+          const localizedBase = sanitizeSkinNameForPath(skin.name)
+          const suffix = selectedSkin.chromaId ? ` ${selectedSkin.chromaId}` : ''
+          baseNames.add(`${localizedBase}${suffix}`)
+          const userVariants = new Set<string>()
+          for (const base of baseNames) {
+            for (const ext of exts) {
+              userVariants.add(`[User] ${base}.${ext}`)
+            }
+          }
           const isSkinDownloaded = downloadedSkins.some(
-            (ds) => ds.championName === champion.key && ds.skinName === skinFileName
+            (ds) =>
+              ds.championName === champion.key &&
+              (ds.skinName === skinFileName || userVariants.has(ds.skinName))
           )
 
           if (!isSkinDownloaded) {

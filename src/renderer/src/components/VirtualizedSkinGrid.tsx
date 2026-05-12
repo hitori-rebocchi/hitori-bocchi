@@ -8,7 +8,7 @@ import { ChromaColorPie } from './ChromaColorPie'
 import { ChromaSelectionDialog } from './ChromaSelectionDialog'
 import { VariantSelectionDialog } from './VariantSelectionDialog'
 import { Button } from './ui/button'
-import { generateSkinFilename } from '../../../shared/utils/skinFilename'
+import { generateSkinFilename, sanitizeSkinNameForPath } from '../../../shared/utils/skinFilename'
 
 interface VirtualizedSkinGridProps {
   skins: Array<{ champion: Champion; skin: Skin }>
@@ -33,6 +33,18 @@ interface VirtualizedSkinGridProps {
   ) => void
   onDeleteCustomSkin?: (skinPath: string, skinName: string) => void
   onEditCustomSkin?: (skinPath: string, currentName: string) => void
+  /**
+   * Called when the user clicks a non-downloaded, non-custom skin. The
+   * parent should generate the .fantome from the local WAD then refresh
+   * `downloadedSkins`. If omitted, dimmed clicks fall through to onSkinClick.
+   */
+  onGenerateLocal?: (champion: Champion, skin: Skin) => void
+  /**
+   * Called when the user clicks a chroma that has no local .fantome yet.
+   * Receives the chroma's index in `skin.chromaList` so the backend can
+   * resolve the WAD skinNumber for the Nth chroma of the base skin.
+   */
+  onGenerateChroma?: (champion: Champion, skin: Skin, chromaId: string, chromaIndex: number) => void
   containerWidth: number
   containerHeight: number
 }
@@ -50,6 +62,8 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
   onToggleVariantFavorite,
   onDeleteCustomSkin,
   onEditCustomSkin,
+  onGenerateLocal,
+  onGenerateChroma,
   containerWidth,
   containerHeight
 }) => {
@@ -159,15 +173,20 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
       if (customSkins.length === 0) return
 
       const modPaths = customSkins
-        .map(
-          ({ champion, skin }) =>
-            downloadedSkins.find(
-              (ds) =>
-                ds.skinName.startsWith('[User]') &&
-                ds.skinName.includes(skin.name) &&
-                (champion.key === 'Custom' || ds.championName === champion.key)
-            )?.localPath
-        )
+        .map(({ champion, skin }) => {
+          // ds.skinName is the on-disk basename, which goes through
+          // sanitizeSkinNameForPath ("K/DA Akali" → "KDA Akali"). Probe both
+          // EN and localized names, sanitized, so K/DA-style skins resolve.
+          const probes = [skin.nameEn, skin.name]
+            .filter((n): n is string => Boolean(n && n.trim()))
+            .map((n) => sanitizeSkinNameForPath(n))
+          return downloadedSkins.find(
+            (ds) =>
+              ds.skinName.startsWith('[User]') &&
+              probes.some((p) => ds.skinName.includes(p)) &&
+              (champion.key === 'Custom' || ds.championName === champion.key)
+          )?.localPath
+        })
         .filter((path): path is string => !!path)
 
       if (modPaths.length === 0) return
@@ -216,10 +235,19 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
       const { champion, skin } = skins[index]
       const skinFileName = generateSkinFilename(skin)
 
+      // Search both EN and localized names — locally-generated fantomes are
+      // written with `nameEn || name` (post 2026-05-12), but pre-fix files on
+      // disk may carry the localized form.
+      // Sanitize so K/DA-style names (which land on disk as "KDA Akali")
+      // still match the includes() probe.
+      const nameVariants = [skin.nameEn, skin.name]
+        .filter((n): n is string => Boolean(n && n.trim()))
+        .map((n) => sanitizeSkinNameForPath(n))
       let downloadedSkin: (typeof downloadedSkins)[number] | undefined
       if (champion.key === 'Custom') {
         downloadedSkin = downloadedSkins.find(
-          (ds) => ds.skinName.startsWith('[User]') && ds.skinName.includes(skin.name)
+          (ds) =>
+            ds.skinName.startsWith('[User]') && nameVariants.some((n) => ds.skinName.includes(n))
         )
       } else {
         downloadedSkin =
@@ -228,7 +256,7 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
             (ds) =>
               ds.championName === champion.key &&
               ds.skinName.includes(`[User]`) &&
-              ds.skinName.includes(skin.name)
+              nameVariants.some((n) => ds.skinName.includes(n))
           )
       }
       const isDownloaded = !!downloadedSkin
@@ -265,6 +293,18 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
         height: style.height - 24 // Subtract gap
       }
 
+      // Non-downloaded, non-Custom skins generate on first click (LOCAL_FANTOME_ONLY_MODE).
+      // The handler stays a no-op if isDownloaded or champion.key === 'Custom'.
+      const isMissingLocally = !isDownloaded && champion.key !== 'Custom'
+      const handleSkinClick = (): void => {
+        if (loading) return
+        if (isMissingLocally && onGenerateLocal) {
+          onGenerateLocal(champion, skin)
+        } else {
+          onSkinClick(champion, skin)
+        }
+      }
+
       const chromas = skin.chromaList || []
 
       if (viewMode === 'list') {
@@ -278,7 +318,7 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
                     ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/20'
                     : 'border-border hover:border-border-strong hover:shadow-md dark:hover:shadow-dark-soft'
                 }`}
-              onClick={() => !loading && onSkinClick(champion, skin)}
+              onClick={handleSkinClick}
             >
               <img
                 src={getSkinImageUrl(champion.key, skin.num, skin.id, downloadedSkin?.localPath)}
@@ -466,7 +506,9 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
         )
       }
 
-      // Card views
+      // Card views — dim if no local .fantome exists (LOCAL_FANTOME_ONLY_MODE)
+      // Custom user skins always render at full opacity; chromas inherit from parent skin.
+      const dimmed = !isDownloaded && champion.key !== 'Custom'
       return (
         <div style={adjustedStyle}>
           <div
@@ -475,12 +517,14 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
                 isSelected
                   ? 'border-primary-500 shadow-xl dark:shadow-dark-large scale-[1.02]'
                   : 'border-border hover:shadow-xl dark:hover:shadow-dark-large shadow-md dark:shadow-dark-soft hover:-translate-y-1 hover:scale-[1.02] hover:border-border-strong'
-              } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+              } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
+                dimmed ? 'opacity-50 hover:opacity-80' : ''
+              }
             `}
           >
             <div
               className="relative aspect-[0.67] overflow-hidden bg-secondary-100 dark:bg-secondary-900"
-              onClick={() => !loading && onSkinClick(champion, skin)}
+              onClick={handleSkinClick}
             >
               <img
                 src={getSkinImageUrl(champion.key, skin.num, skin.id, downloadedSkin?.localPath)}
@@ -663,7 +707,7 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
               className={`bg-white dark:bg-charcoal-800 ${viewMode === 'spacious' ? 'p-4' : viewMode === 'comfortable' ? 'p-3' : 'p-2'} ${'cursor-pointer hover:bg-charcoal-50 dark:hover:bg-charcoal-700'} transition-colors`}
               onClick={(e) => {
                 e.stopPropagation()
-                !loading && onSkinClick(champion, skin)
+                handleSkinClick()
               }}
             >
               <p
@@ -726,6 +770,7 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
           onChromaSelect={onSkinClick}
           favorites={favorites}
           onToggleChromaFavorite={onToggleChromaFavorite}
+          onGenerateChroma={onGenerateChroma}
         />
       )}
 

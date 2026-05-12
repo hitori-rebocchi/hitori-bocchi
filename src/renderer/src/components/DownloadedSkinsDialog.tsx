@@ -44,14 +44,8 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
   const [deletingSkins, setDeletingSkins] = useState<Set<string>>(new Set())
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'repo' | 'custom'>('all')
   const [isDeletingAll, setIsDeletingAll] = useState(false)
   const [deletingChampions, setDeletingChampions] = useState<Set<string>>(new Set())
-  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
-  const [skinUpdates, setSkinUpdates] = useState<Record<string, any>>({})
-  const [updatingSkins, setUpdatingSkins] = useState<Set<string>>(new Set())
-  const [isGeneratingMetadata, setIsGeneratingMetadata] = useState(false)
-  const [isUpdatingAll, setIsUpdatingAll] = useState(false)
 
   // Group skins by champion
   const groupedSkins = useMemo(() => {
@@ -66,10 +60,6 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
       }
 
       const isCustom = skin.championName === 'Custom' || skin.skinName.includes('[User]')
-
-      // Filter by category
-      if (selectedCategory === 'repo' && isCustom) return
-      if (selectedCategory === 'custom' && !isCustom) return
 
       // Filter by search query
       const champion = championData?.champions.find((c) => c.key === skin.championName)
@@ -97,18 +87,11 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
     })
 
     return groups
-  }, [downloadedSkins, championData, searchQuery, selectedCategory])
+  }, [downloadedSkins, championData, searchQuery])
 
   const totalSkins = useMemo(() => {
     return Object.values(groupedSkins).reduce((acc, skins) => acc + skins.length, 0)
   }, [groupedSkins])
-
-  const skinsWithUpdates = useMemo(() => {
-    return downloadedSkins.filter((skin) => {
-      const key = `${skin.championName}_${skin.skinName}`
-      return skinUpdates[key]?.hasUpdate && skin.url // Only include skins with URLs
-    })
-  }, [downloadedSkins, skinUpdates])
 
   const handleDeleteSkin = async (
     championName: string,
@@ -209,108 +192,6 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
     }
   }
 
-  const handleCheckForUpdates = async () => {
-    setIsCheckingUpdates(true)
-    try {
-      const result = await window.api.checkSkinUpdates()
-      if (result.success) {
-        setSkinUpdates(result.data || {})
-
-        // Show helpful message about skins without metadata
-        const repositorySkins = downloadedSkins.filter((skin) => skin.source === 'repository')
-        const skinsWithoutMetadata = repositorySkins.filter((skin) => !skin.metadata)
-
-        if (skinsWithoutMetadata.length > 0) {
-          console.log(`${skinsWithoutMetadata.length} skins downloaded before update tracking`)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to check for updates:', error)
-    } finally {
-      setIsCheckingUpdates(false)
-    }
-  }
-
-  const handleUpdateSkin = async (skin: any) => {
-    const key = `${skin.championName}_${skin.skinName}`
-    setUpdatingSkins((prev) => new Set(prev).add(key))
-
-    try {
-      const result = await window.api.updateSkin(skin)
-      if (result.success) {
-        await onRefresh()
-        // Remove from updates map
-        setSkinUpdates((prev) => {
-          const newUpdates = { ...prev }
-          delete newUpdates[key]
-          return newUpdates
-        })
-      }
-    } catch (error) {
-      console.error('Failed to update skin:', error)
-    } finally {
-      setUpdatingSkins((prev) => {
-        const newSet = new Set(prev)
-        newSet.delete(key)
-        return newSet
-      })
-    }
-  }
-
-  const handleGenerateMetadata = async () => {
-    setIsGeneratingMetadata(true)
-    try {
-      const result = await window.api.generateMetadataForExistingSkins()
-      if (result.success) {
-        await onRefresh()
-        console.log('Metadata generated successfully for existing skins')
-      }
-    } catch (error) {
-      console.error('Failed to generate metadata:', error)
-    } finally {
-      setIsGeneratingMetadata(false)
-    }
-  }
-
-  const handleUpdateAll = async () => {
-    if (skinsWithUpdates.length === 0) return
-
-    setIsUpdatingAll(true)
-    try {
-      const result = await window.api.bulkUpdateSkins(skinsWithUpdates as any[])
-      if (result.success && result.data) {
-        await onRefresh()
-
-        // Clear updates for successfully updated skins
-        if (result.data.updated) {
-          setSkinUpdates((prev) => {
-            const newUpdates = { ...prev }
-            result.data!.updated.forEach((skin) => {
-              const key = `${skin.championName}_${skin.skinName}`
-              delete newUpdates[key]
-            })
-            return newUpdates
-          })
-        }
-
-        // Show results
-        const { updated, failed } = result.data
-        console.log(`Updated ${updated.length} skins, ${failed.length} failed`)
-
-        if (failed.length > 0) {
-          console.warn(
-            'Failed to update some skins:',
-            failed.map((f) => f.skin.skinName)
-          )
-        }
-      }
-    } catch (error) {
-      console.error('Failed to update all skins:', error)
-    } finally {
-      setIsUpdatingAll(false)
-    }
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[800px] max-h-[80vh] flex flex-col">
@@ -318,58 +199,6 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
           <DialogTitle className="flex items-center justify-between mr-4">
             <span>{t('skins.downloadedCount', { count: totalSkins })}</span>
             <div className="flex gap-2">
-              {totalSkins > 0 && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleGenerateMetadata}
-                  disabled={isGeneratingMetadata}
-                >
-                  {isGeneratingMetadata ? (
-                    <>
-                      <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                      {t('skins.generating')}
-                    </>
-                  ) : (
-                    t('skins.generateMetadata')
-                  )}
-                </Button>
-              )}
-              {totalSkins > 0 && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleCheckForUpdates}
-                  disabled={isCheckingUpdates}
-                >
-                  {isCheckingUpdates ? (
-                    <>
-                      <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                      {t('skins.checking')}
-                    </>
-                  ) : (
-                    t('skins.checkForUpdates')
-                  )}
-                </Button>
-              )}
-              {skinsWithUpdates.length > 0 && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleUpdateAll}
-                  disabled={isUpdatingAll}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  {isUpdatingAll ? (
-                    <>
-                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      {t('skins.updatingCount', { count: skinsWithUpdates.length })}
-                    </>
-                  ) : (
-                    t('skins.updateAll', { count: skinsWithUpdates.length })
-                  )}
-                </Button>
-              )}
               {totalSkins > 0 && (
                 <Button
                   variant="destructive"
@@ -392,31 +221,6 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Category Filter */}
-          <div className="flex gap-2 mb-4">
-            <Button
-              variant={selectedCategory === 'all' ? 'default' : 'secondary'}
-              onClick={() => setSelectedCategory('all')}
-              className={selectedCategory === 'all' ? 'bg-primary-500 hover:bg-primary-600' : ''}
-            >
-              {t('skins.allSkins')}
-            </Button>
-            <Button
-              variant={selectedCategory === 'repo' ? 'default' : 'secondary'}
-              onClick={() => setSelectedCategory('repo')}
-              className={selectedCategory === 'repo' ? 'bg-primary-500 hover:bg-primary-600' : ''}
-            >
-              {t('skins.repository')}
-            </Button>
-            <Button
-              variant={selectedCategory === 'custom' ? 'default' : 'secondary'}
-              onClick={() => setSelectedCategory('custom')}
-              className={selectedCategory === 'custom' ? 'bg-primary-500 hover:bg-primary-600' : ''}
-            >
-              {t('skins.customImports')}
-            </Button>
-          </div>
-
           {/* Search */}
           <Input
             type="text"
@@ -478,8 +282,6 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
                         {skins.map((skin) => {
                           const key = `${championKey}_${skin.skinName}`
                           const isDeleting = deletingSkins.has(key)
-                          const isUpdating = updatingSkins.has(key)
-                          const updateInfo = skinUpdates[key]
                           const displayName = skin.skinName
                             .replace(/\[User\]\s*/, '')
                             .replace(/\.(zip|wad|fantome)$/, '')
@@ -501,55 +303,8 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
                                       : t('skins.userImport')}
                                   </Badge>
                                 )}
-                                {updateInfo?.hasUpdate && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300"
-                                  >
-                                    {t('skins.updateAvailable')}
-                                  </Badge>
-                                )}
-                                {!skin.isCustom && !updateInfo?.canCheck && (
-                                  <span
-                                    className="text-xs text-gray-400"
-                                    title={t('skins.downloadedBeforeTracking')}
-                                  >
-                                    ⓘ
-                                  </span>
-                                )}
                               </div>
                               <div className="flex gap-2">
-                                {updateInfo?.hasUpdate && (
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => {
-                                      // Find the original skin data to get the URL
-                                      const originalSkin = downloadedSkins.find(
-                                        (s) =>
-                                          s.championName === championKey &&
-                                          s.skinName === skin.skinName
-                                      )
-                                      handleUpdateSkin({
-                                        championName: championKey,
-                                        skinName: skin.skinName,
-                                        url: originalSkin?.url || '',
-                                        localPath: skin.localPath,
-                                        source: 'repository'
-                                      })
-                                    }}
-                                    disabled={isUpdating}
-                                  >
-                                    {isUpdating ? (
-                                      <>
-                                        <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                                        {t('skins.updating')}
-                                      </>
-                                    ) : (
-                                      t('skins.update')
-                                    )}
-                                  </Button>
-                                )}
                                 <Button
                                   variant="destructive"
                                   size="sm"

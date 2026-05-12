@@ -176,15 +176,34 @@ export function ToolsDownloadModal() {
               {t('tools.dllInstructions')}
             </p>
 
+            <p className="text-text-secondary leading-relaxed text-xs">
+              The DLL from the LeagueToolkit/ltk-manager (successor to cslol-manager) is
+              ABI-compatible with the bundled mod-tools.exe runoverlay command. Pick a signed{' '}
+              <code className="px-1 py-0.5 bg-secondary-800 rounded">cslol-dll.dll</code> below and
+              Bocchi will copy it into the tools folder.
+            </p>
+
             <p className="text-xs text-text-tertiary">{t('tools.dllWithoutNotice')}</p>
 
-            <button
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-medium"
-              onClick={handleOpenToolsFolder}
-            >
-              <FolderOpen className="w-5 h-5" />
-              {t('tools.openToolsFolder')}
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-medium"
+                onClick={async () => {
+                  const res = await window.api.installDllFromFile()
+                  if (res?.success) await checkDll()
+                }}
+              >
+                <Download className="w-5 h-5" />
+                Browse for DLL…
+              </button>
+              <button
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-secondary-700 hover:bg-secondary-600 text-white rounded-lg transition-colors font-medium"
+                onClick={handleOpenToolsFolder}
+              >
+                <FolderOpen className="w-5 h-5" />
+                {t('tools.openToolsFolder')}
+              </button>
+            </div>
           </div>
         </div>
       </div>

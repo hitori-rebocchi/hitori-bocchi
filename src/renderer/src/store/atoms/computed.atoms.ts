@@ -127,6 +127,48 @@ export const championSkinsMapAtom = atom((get) => {
         .replace('[User] ', '')
         .replace(/\.(wad|zip|fantome|wad\.client)$/i, '')
 
+      // If this [User] fantome's name lines up with one of the champion's
+      // real Riot skins (or one of its chromas), suppress the separate tile
+      // — VirtualizedSkinGrid already lights up the matching Riot card via
+      // its [User]+skin.name fallback. Without this guard the on-demand
+      // "click to generate" flow produces a duplicate card next to the
+      // original (visible as both a dim Riot tile and a bright Custom tile).
+      //
+      // Match against `nameEn` AND `name` so a fantome generated under one
+      // locale still dedups when the UI is set to another. Chromas are
+      // matched as the suffix pattern `{base} {chromaId}` because that's
+      // how local-fantome:generate-for-skin names them on disk.
+      let matchesRiotSkin = false
+      if (champion.key !== 'Custom') {
+        const sanitizedDisplay = sanitizeSkinNameForPath(displayName).toLowerCase()
+        const chromaMatch = sanitizedDisplay.match(/^(.+)\s+(\d+)$/)
+        for (const s of champion.skins) {
+          if (s.num === 0) continue
+          const baseCandidates = [s.nameEn, s.name].filter(Boolean) as string[]
+          const baseSanitized = baseCandidates.map((n) => sanitizeSkinNameForPath(n).toLowerCase())
+          if (baseSanitized.includes(sanitizedDisplay)) {
+            matchesRiotSkin = true
+            break
+          }
+          if (chromaMatch) {
+            const [, baseFromDisplay, chromaIdStr] = chromaMatch
+            const chromaIdNum = parseInt(chromaIdStr, 10)
+            if (baseSanitized.includes(baseFromDisplay)) {
+              const chromaList = (s as { chromaList?: Array<{ id: number }> }).chromaList ?? []
+              if (chromaList.some((c) => c.id === chromaIdNum)) {
+                matchesRiotSkin = true
+                break
+              }
+            }
+          }
+        }
+      }
+      if (matchesRiotSkin) {
+        // The Riot tile handles its own "is downloaded" badge via the grid's
+        // fallback. Nothing to add to either map.
+        return
+      }
+
       const customSkin: Skin = {
         id: `custom_${downloadedSkin.skinName}`,
         num: -1,
@@ -214,7 +256,10 @@ export const favoritesFilteredSkinsAtom = atom((get) => {
   )
 })
 
-// 5. Download filter
+// 5. Download / availability filter.
+// "downloaded" in local-only mode means a `[User] {base}.fantome` exists for
+// this champion+skin. Probe under both nameEn and the localized name, and
+// sanitize the base so K/DA-style names match (on-disk loses the slash).
 export const downloadFilteredSkinsAtom = atom((get) => {
   const skins = get(favoritesFilteredSkinsAtom)
   const filters = get(filtersAtom)
@@ -222,11 +267,23 @@ export const downloadFilteredSkinsAtom = atom((get) => {
   if (filters.downloadStatus === 'all') return skins
 
   const downloadedSkins = get(downloadedSkinsAtom)
+  const exts = ['fantome', 'zip', 'wad', 'wad.client']
 
   return skins.filter(({ champion, skin }) => {
-    const skinFileName = `${sanitizeSkinNameForPath(skin.nameEn || skin.name)}.zip`
+    const repoZipName = `${sanitizeSkinNameForPath(skin.nameEn || skin.name)}.zip`
+    const userBases = [skin.nameEn, skin.name]
+      .filter((n): n is string => Boolean(n && n.trim()))
+      .map((n) => sanitizeSkinNameForPath(n))
+    const userNames = new Set<string>()
+    for (const base of userBases) {
+      for (const ext of exts) {
+        userNames.add(`[User] ${base}.${ext}`)
+      }
+    }
     const isDownloaded = downloadedSkins.some(
-      (ds) => ds.championName === champion.key && ds.skinName === skinFileName
+      (ds) =>
+        ds.championName === champion.key &&
+        (ds.skinName === repoZipName || userNames.has(ds.skinName))
     )
     return filters.downloadStatus === 'downloaded' ? isDownloaded : !isDownloaded
   })
