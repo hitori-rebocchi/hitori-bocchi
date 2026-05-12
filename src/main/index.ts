@@ -5,6 +5,11 @@ import fs from 'fs'
 import crypto from 'crypto'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../build/icon.png?asset'
+import { initMainLogger } from './logger'
+
+// Initialize logger before anything else so service-level console.log calls
+// fired during module-time evaluation are captured too.
+initMainLogger()
 import { SkinDownloader } from './services/skinDownloader'
 import { ModToolsWrapper } from './services/modToolsWrapper'
 import { championDataService } from './services/championDataService'
@@ -29,16 +34,23 @@ import { multiRitoFixesService } from './services/multiRitoFixesService'
 import { skinMigrationService } from './services/skinMigrationService'
 import { repositoryService } from './services/repositoryService'
 import { GamePathService } from './services/gamePathService'
+import { LOCAL_FANTOME_ONLY_MODE } from '../shared/constants/features'
+import {
+  generateFantomes as generateLocalFantomes,
+  type GenerationRequest as LocalFantomeRequest
+} from './services/skin0SwapService'
+import { listLocalChampions, listSkinsForChampion } from './services/localSkinMetadataService'
+import { hashtableService } from './services/hashtableService'
 import {
   translationService,
   supportedLanguages,
   type LanguageCode
 } from './services/translationService'
-import { SkinInfo } from './types'
 import { PresetService } from './services/presetService'
 import { urlDownloadService } from './services/urlDownloadService'
 import { FileImportOptions } from './services/fileImportService'
 import { sanitizeSkinNameForPath } from '../shared/utils/skinFilename'
+import { buildUserFantomeCandidates } from '../shared/utils/userFantomeLookup'
 import {
   SelectedSkin,
   PresetUpdate,
@@ -646,6 +658,13 @@ function setupIpcHandlers(): void {
 
   // Skin management
   ipcMain.handle('download-skin', async (_, url: string) => {
+    if (LOCAL_FANTOME_ONLY_MODE) {
+      return {
+        success: false,
+        error:
+          'Repository skin downloads are disabled. Use the Generate button to build .fantome files from your local LoL installation, or import a .fantome / .zip file from disk.'
+      }
+    }
     try {
       const skinInfo = await skinDownloader.downloadSkin(url)
       return { success: true, skinInfo }
@@ -720,6 +739,12 @@ function setupIpcHandlers(): void {
   })
   // URL download handler
   ipcMain.handle('download-from-url', async (_, url: string) => {
+    if (LOCAL_FANTOME_ONLY_MODE) {
+      return {
+        success: false,
+        error: 'URL imports are disabled. Use the Generate button or import a local .fantome file.'
+      }
+    }
     try {
       const result = await urlDownloadService.downloadFromUrl(url)
       return result
@@ -764,6 +789,12 @@ function setupIpcHandlers(): void {
 
   // Bulk download from repository
   ipcMain.handle('download-all-skins-bulk', async (event, options) => {
+    if (LOCAL_FANTOME_ONLY_MODE) {
+      return {
+        success: false,
+        error: 'Bulk repository downloads are disabled in this build.'
+      }
+    }
     try {
       await skinDownloader.downloadAllSkinsFromRepository(options, (progress) => {
         event.sender.send('download-all-skins-bulk-progress', progress)
@@ -896,28 +927,28 @@ function setupIpcHandlers(): void {
               `[Patcher] Processing custom mod: champion=${champion}, skinFile=${skinFile}, skinName=${skinName}, fileExt=${fileExt}`
             )
 
-            // First try to find the mod file in mod-files directory
+            // First try to find the mod file in mod-files directory.
+            // .fantome is the dominant format now (generated locally + most
+            // imports), so probe it first to keep the apply-time log tidy.
             const modFilesDir = path.join(app.getPath('userData'), 'mod-files')
-            const possibleExtensions = ['.wad.client', '.wad', '.zip', '.fantome']
+            const possibleExtensions = ['.fantome', '.zip', '.wad.client', '.wad']
             let modFilePath: string | null = null
 
-            // Try champion-specific paths first
-            // If we already know the extension, try that first
+            // Try champion-specific paths first; if we already know the
+            // extension (from the skinId), try that first.
             const extensionsToTry = fileExt
               ? [fileExt, ...possibleExtensions.filter((e) => e !== fileExt)]
               : possibleExtensions
 
             for (const ext of extensionsToTry) {
               const testPath = path.join(modFilesDir, `${champion}_${skinName}${ext}`)
-              console.log(`[Patcher] Trying path: ${testPath}`)
               try {
                 await fs.promises.access(testPath)
                 modFilePath = testPath
-                console.log(`[Patcher] Found mod at champion-specific path: ${testPath}`)
+                console.log(`[Patcher] Found mod: ${testPath}`)
                 break
-              } catch (error) {
-                console.log(`[Patcher] Path not found: ${testPath}, error:`, error)
-                // Continue to next extension
+              } catch {
+                // not present, try next extension
               }
             }
 
@@ -974,56 +1005,29 @@ function setupIpcHandlers(): void {
             return { localPath: modFilePath }
           }
 
-          // Handle remote skins
-          // Check if the skin is already downloaded (list fetched once before the loop)
+          // Local-only mode: locate a previously-generated fantome for this
+          // champion+skin. Repo downloads are gone — if it isn't here yet, the
+          // user needs to click the dimmed tile to generate it from their WAD.
           const skinCtx = skinContextMap.get(skinKey)
           const properChampionName = skinCtx?.championName || champion
-          const sanitizedSkinFile =
-            sanitizeSkinNameForPath(skinFile.replace(/\.zip$/i, '')) + '.zip'
+          const candidates = buildUserFantomeCandidates(skinFile, skinCtx)
           const existingSkin = downloadedSkins.find(
             (ds) =>
               (ds.championName === champion ||
                 decodeURIComponent(ds.championName) === champion ||
                 ds.championName === properChampionName ||
                 decodeURIComponent(ds.championName) === properChampionName) &&
-              (ds.skinName === skinFile || ds.skinName === sanitizedSkinFile)
+              candidates.has(ds.skinName)
           )
 
           if (existingSkin && existingSkin.localPath) {
-            console.log(`[Patcher] Skin already downloaded: ${champion}/${skinFile}`)
+            console.log(`[Patcher] Using local fantome: ${champion}/${skinFile}`)
             return { localPath: existingSkin.localPath }
           }
 
-          // If not downloaded, check if this might be a variant (has special naming patterns)
-          const isLikelyVariant =
-            skinFile.includes('Arcane Fractured') ||
-            skinFile.includes('Elementalist') ||
-            skinFile.includes('GunGoddess') ||
-            skinFile.includes('Gun Goddess') ||
-            skinFile.includes('form') ||
-            skinFile.includes('Hero') ||
-            skinFile.includes('Exalted')
-
-          if (isLikelyVariant) {
-            throw new Error(
-              `Variant skin not found in downloads: ${champion}/${skinFile}. Variants must be downloaded through the UI first.`
-            )
-          }
-
-          // For regular skins, try to download
-          // Get the SelectedSkin context to access proper championName and championId
-          const selectedSkinContext = skinContextMap.get(skinKey)
-          const championId = selectedSkinContext?.championId
-          const championName = selectedSkinContext?.championName || champion // Fallback to key if context not found
-          const url = repositoryService.constructGitHubUrl(
-            championName, // Use championName for proper URL construction (e.g., "Aurelion Sol" not "AurelionSol")
-            skinFile,
-            false,
-            undefined,
-            championId
+          throw new Error(
+            `Local fantome not found for ${champion}/${skinFile}. Click the dimmed skin tile to generate it from your installed League WAD first.`
           )
-          console.log(`[Patcher] Downloading skin: ${url}`)
-          return skinDownloader.downloadSkin(url)
         })
       )
 
@@ -1228,26 +1232,24 @@ function setupIpcHandlers(): void {
               )
 
               const modFilesDir = path.join(app.getPath('userData'), 'mod-files')
-              const possibleExtensions = ['.wad.client', '.wad', '.zip', '.fantome']
+              const possibleExtensions = ['.fantome', '.zip', '.wad.client', '.wad']
               let modFilePath: string | null = null
 
-              // Try champion-specific paths first
-              // If we already know the extension, try that first
+              // Try champion-specific paths first. .fantome leads the probe
+              // order since it's the dominant on-disk format.
               const extensionsToTry = fileExt
                 ? [fileExt, ...possibleExtensions.filter((e) => e !== fileExt)]
                 : possibleExtensions
 
               for (const ext of extensionsToTry) {
                 const testPath = path.join(modFilesDir, `${champion}_${skinName}${ext}`)
-                console.log(`[SmartApply] Trying path: ${testPath}`)
                 try {
                   await fs.promises.access(testPath)
                   modFilePath = testPath
-                  console.log(`[SmartApply] Found mod at champion-specific path: ${testPath}`)
+                  console.log(`[SmartApply] Found mod: ${testPath}`)
                   break
-                } catch (error) {
-                  console.log(`[SmartApply] Path not found: ${testPath}, error:`, error)
-                  // Continue
+                } catch {
+                  // not present, try next
                 }
               }
 
@@ -1304,55 +1306,27 @@ function setupIpcHandlers(): void {
               return { localPath: modFilePath }
             }
 
-            // Check if the skin is already downloaded (list fetched once before the loop)
+            // Local-only mode: same lookup as Apply — no repo downloads.
             const skinCtx = skinContextMap.get(skinKey)
             const properChampionName = skinCtx?.championName || champion
-            const sanitizedSkinFile =
-              sanitizeSkinNameForPath(skinFile.replace(/\.zip$/i, '')) + '.zip'
+            const candidates = buildUserFantomeCandidates(skinFile, skinCtx)
             const existingSkin = downloadedSkins.find(
               (ds) =>
                 (ds.championName === champion ||
                   decodeURIComponent(ds.championName) === champion ||
                   ds.championName === properChampionName ||
                   decodeURIComponent(ds.championName) === properChampionName) &&
-                (ds.skinName === skinFile || ds.skinName === sanitizedSkinFile)
+                candidates.has(ds.skinName)
             )
 
             if (existingSkin && existingSkin.localPath) {
-              console.log(`[SmartApply] Skin already downloaded: ${champion}/${skinFile}`)
+              console.log(`[SmartApply] Using local fantome: ${champion}/${skinFile}`)
               return { localPath: existingSkin.localPath }
             }
 
-            // If not downloaded, check if this might be a variant (has special naming patterns)
-            const isLikelyVariant =
-              skinFile.includes('Arcane Fractured') ||
-              skinFile.includes('Elementalist') ||
-              skinFile.includes('GunGoddess') ||
-              skinFile.includes('Gun Goddess') ||
-              skinFile.includes('form') ||
-              skinFile.includes('Hero') ||
-              skinFile.includes('Exalted')
-
-            if (isLikelyVariant) {
-              throw new Error(
-                `Variant skin not found in downloads: ${champion}/${skinFile}. Variants must be downloaded through the UI first.`
-              )
-            }
-
-            // For regular skins, try to download
-            // Get the SelectedSkin context to access proper championName and championId
-            const selectedSkinContext = skinContextMap.get(skinKey)
-            const championId = selectedSkinContext?.championId
-            const championName = selectedSkinContext?.championName || champion // Fallback to key if context not found
-            const url = repositoryService.constructGitHubUrl(
-              championName, // Use championName for proper URL construction (e.g., "Aurelion Sol" not "AurelionSol")
-              skinFile,
-              false,
-              undefined,
-              championId
+            throw new Error(
+              `Local fantome not found for ${champion}/${skinFile}. Click the dimmed skin tile to generate it from your installed League WAD first.`
             )
-            console.log(`[SmartApply] Downloading skin: ${url}`)
-            return skinDownloader.downloadSkin(url)
           })
         )
 
@@ -1644,6 +1618,18 @@ function setupIpcHandlers(): void {
     return await modToolsWrapper.checkDllExist()
   })
 
+  ipcMain.handle('install-dll-from-file', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Select cslol-dll.dll',
+      filters: [{ name: 'DLL', extensions: ['dll'] }],
+      properties: ['openFile']
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, error: 'cancelled' }
+    }
+    return await modToolsWrapper.installDllFromFile(result.filePaths[0])
+  })
+
   ipcMain.handle('open-tools-folder', async () => {
     const toolsPath = settingsService.getModToolsPath()
     if (toolsPath) {
@@ -1691,6 +1677,195 @@ function setupIpcHandlers(): void {
       return { success: true, ...info }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // Local fantome generation (read user's WAD, emit .fantome — no Riot assets bundled)
+  ipcMain.handle('local-fantome:list-champions', async (_, leagueDir: string) => {
+    try {
+      const list = await listLocalChampions(leagueDir)
+      return { success: true, champions: list }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  ipcMain.handle('local-fantome:list-skins', async (_, wadPath: string) => {
+    try {
+      const skins = await listSkinsForChampion(wadPath)
+      return { success: true, skins }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  ipcMain.handle('local-fantome:generate', async (_, request: LocalFantomeRequest) => {
+    try {
+      // Always write into bocchi's library so generated skins appear in the picker
+      // alongside imports — matches the {champion}_{skinName}.fantome naming the
+      // patcher expects (see skinDownloader / fileImportService).
+      const modFilesDir = path.join(app.getPath('userData'), 'mod-files')
+      await fs.promises.mkdir(modFilesDir, { recursive: true })
+      const itemsWithBocchiNames = request.items.map((item) => ({
+        ...item,
+        fileLabel: `${request.champion}_${item.fileLabel}`
+      }))
+      const written = await generateLocalFantomes(
+        { ...request, items: itemsWithBocchiNames, outputDir: modFilesDir },
+        (progress) => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('local-fantome:progress', progress)
+          }
+        }
+      )
+      return { success: true, written }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  /**
+   * One-skin variant. Called when the user clicks a dimmed skin tile in the
+   * library grid — generates that exact skin from the local WAD and saves it
+   * under bocchi's `{champion}_{skinName}.fantome` naming so the existing
+   * patcher and downloaded-skins listing pick it up like any other import.
+   */
+  ipcMain.handle(
+    'local-fantome:generate-for-skin',
+    async (
+      _,
+      args: {
+        championKey: string
+        skinNum: number
+        skinName: string
+        author: string
+        leagueDir?: string
+        /** When set, generate a chroma of `skinNum`; the value is the 0-based
+         *  index into the base skin's chromaList (== nth chroma in WAD order). */
+        chromaIndex?: number
+        /** Riot chromaId, appended to the on-disk name as `{name} {label}.fantome`
+         *  so bocchi's existing patcher lookup finds it. Required iff chromaIndex set. */
+        chromaIdLabel?: string
+      }
+    ) => {
+      try {
+        const author = (args.author || '').trim() || 'bocchi'
+        // Resolve League directory in this order:
+        //   1. explicit args.leagueDir (passed by caller)
+        //   2. localFantomeLeagueDir setting (legacy generate-dialog setting)
+        //   3. settings.gamePath — what GameDetector populates and what the
+        //      "Browse for League folder" UI updates. gamePath is the .../Game
+        //      subdir, so derive the root from its parent.
+        //   4. hardcoded fallback
+        const fantomeDirSetting = (settingsService.get('localFantomeLeagueDir') as string) || ''
+        const gamePathSetting = (settingsService.get('gamePath') as string) || ''
+        const fromGamePath = gamePathSetting ? path.dirname(gamePathSetting) : ''
+        const leagueDir =
+          args.leagueDir || fantomeDirSetting || fromGamePath || 'C:/Riot Games/League of Legends'
+        const wadPath = path.join(
+          leagueDir,
+          'Game',
+          'DATA',
+          'FINAL',
+          'Champions',
+          `${args.championKey}.wad.client`
+        )
+        try {
+          await fs.promises.access(wadPath)
+        } catch {
+          return {
+            success: false,
+            error: `WAD not found for ${args.championKey} at ${wadPath}. Check the League directory in the Generate dialog.`
+          }
+        }
+        const modFilesDir = path.join(app.getPath('userData'), 'mod-files')
+        await fs.promises.mkdir(modFilesDir, { recursive: true })
+
+        const cleanSkinName = sanitizeSkinNameForPath(args.skinName)
+
+        // For chromas: resolve the chroma's actual WAD skinNumber via our
+        // metadata scan, then name it `{champion}_{Name} {chromaId}.fantome`
+        // (matches bocchi's chroma file convention).
+        let targetSkinNum = args.skinNum
+        let fileLabel = `${args.championKey}_${cleanSkinName}`
+        let displayName = cleanSkinName
+        if (typeof args.chromaIndex === 'number' && args.chromaIdLabel) {
+          const allWadSkins = await listSkinsForChampion(wadPath)
+          const chromasOfBase = allWadSkins
+            .filter((s) => s.isChromaOf === args.skinNum)
+            .sort((a, b) => a.skinNumber - b.skinNumber)
+          const picked = chromasOfBase[args.chromaIndex]
+          if (!picked) {
+            return {
+              success: false,
+              error: `No chroma at index ${args.chromaIndex} for ${args.championKey} skin${args.skinNum} (WAD has ${chromasOfBase.length} chromas)`
+            }
+          }
+          targetSkinNum = picked.skinNumber
+          fileLabel = `${args.championKey}_${cleanSkinName} ${args.chromaIdLabel}`
+          displayName = `${cleanSkinName} ${args.chromaIdLabel}`
+        }
+
+        const written = await generateLocalFantomes(
+          {
+            wadPath,
+            champion: args.championKey,
+            items: [
+              {
+                skinNumber: targetSkinNum,
+                fileLabel,
+                displayName
+              }
+            ],
+            outputDir: modFilesDir,
+            author
+          },
+          (progress) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('local-fantome:progress', progress)
+            }
+          }
+        )
+        if (written.length === 0) {
+          return { success: false, error: 'Generation produced no output (see log).' }
+        }
+        return { success: true, localPath: written[0] }
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      }
+    }
+  )
+
+  ipcMain.handle('local-fantome:hashtable-status', async () => {
+    const exists = await hashtableService.exists()
+    return { success: true, exists, path: hashtableService.getFilePath() }
+  })
+
+  ipcMain.handle('local-fantome:hashtable-download', async () => {
+    try {
+      const path = await hashtableService.ensure((p) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('local-fantome:hashtable-progress', p)
+        }
+      })
+      return { success: true, path }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
   })
 
@@ -2001,53 +2176,27 @@ function setupIpcHandlers(): void {
     }
   })
 
-  // Skin update handlers
-  ipcMain.handle('check-skin-updates', async (_, skinPaths?: string[]) => {
-    try {
-      let skinInfos: SkinInfo[] | undefined
+  // Skin update handlers — disabled in local-fantome-only mode (no repo).
+  ipcMain.handle('check-skin-updates', async () => {
+    return { success: true, data: {} }
+  })
 
-      if (skinPaths) {
-        // Check updates for specific skins
-        const allSkins = await skinDownloader.listDownloadedSkins()
-        skinInfos = allSkins.filter((skin) => skin.localPath && skinPaths.includes(skin.localPath))
-      }
-
-      const updates = await skinDownloader.checkForSkinUpdates(skinInfos)
-
-      // Convert Map to object for JSON serialization
-      const updatesObj = Object.fromEntries(updates.entries())
-
-      return { success: true, data: updatesObj }
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  ipcMain.handle('update-skin', async () => {
+    return {
+      success: false,
+      error: 'Repository skin updates are disabled. Regenerate the fantome locally instead.'
     }
   })
 
-  ipcMain.handle('update-skin', async (_, skinInfo: SkinInfo) => {
-    try {
-      const updatedSkin = await skinDownloader.updateSkin(skinInfo)
-      return { success: true, data: updatedSkin }
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
-    }
-  })
-
-  ipcMain.handle('bulk-update-skins', async (_, skinInfos: SkinInfo[]) => {
-    try {
-      const result = await skinDownloader.bulkUpdateSkins(skinInfos)
-      return { success: true, data: result }
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  ipcMain.handle('bulk-update-skins', async () => {
+    return {
+      success: false,
+      error: 'Repository skin updates are disabled. Regenerate fantomes locally instead.'
     }
   })
 
   ipcMain.handle('generate-metadata-for-existing-skins', async () => {
-    try {
-      await skinDownloader.generateMetadataForExistingSkins()
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
-    }
+    return { success: true }
   })
 
   // MultiRitoFixes handlers

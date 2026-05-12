@@ -588,11 +588,22 @@ function AppContent(): React.JSX.Element {
           downloadUrl: githubUrl
         })
 
-        // Check if already downloaded
+        // Check if already downloaded. Recognize both repo `.zip` entries and
+        // locally-generated `[User] ...{ext}` entries so auto-select doesn't
+        // re-trigger a repo download for skins the user already has on disk.
         const downloadedSkinsResult = await window.api.listDownloadedSkins()
         if (downloadedSkinsResult.success) {
+          const baseFileName = skinFileName.replace(/\.zip$/i, '')
+          const userVariants = [
+            `[User] ${baseFileName}.fantome`,
+            `[User] ${baseFileName}.zip`,
+            `[User] ${baseFileName}.wad`,
+            `[User] ${baseFileName}.wad.client`
+          ]
           const isAlreadyDownloaded = downloadedSkinsResult.skins?.some(
-            (ds) => ds.championName === champion.key && ds.skinName === skinFileName
+            (ds) =>
+              ds.championName === champion.key &&
+              (ds.skinName === skinFileName || userVariants.includes(ds.skinName))
           )
 
           if (!isAlreadyDownloaded) {

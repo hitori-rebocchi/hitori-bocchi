@@ -252,7 +252,68 @@ export interface IApi {
     callback: (details: { loaded: number; total: number; speed: number }) => void
   ) => () => void
   checkDllExist: () => Promise<boolean>
+  installDllFromFile: () => Promise<{ success: boolean; error?: string }>
   openToolsFolder: () => Promise<{ success: boolean; error?: string }>
+
+  // Local fantome generation (read user's WAD, emit .fantome — no Riot assets bundled)
+  localFantomeListChampions: (leagueDir: string) => Promise<{
+    success: boolean
+    champions?: Array<{ name: string; wadPath: string }>
+    error?: string
+  }>
+  localFantomeListSkins: (wadPath: string) => Promise<{
+    success: boolean
+    skins?: Array<{
+      skinNumber: number
+      internalName: string
+      skinline: string
+      skinlineFull: string
+      skinlineAbbr: string
+      friendlyName: string
+      shortName: string
+      loadscreen: string | null
+      isChromaOf: number | null
+    }>
+    error?: string
+  }>
+  localFantomeGenerate: (request: {
+    wadPath: string
+    champion: string
+    items: Array<{ skinNumber: number; fileLabel: string; displayName: string }>
+    outputDir: string
+    author: string
+  }) => Promise<{ success: boolean; written?: string[]; error?: string }>
+  localFantomeGenerateForSkin: (args: {
+    championKey: string
+    skinNum: number
+    skinName: string
+    author: string
+    leagueDir?: string
+    chromaIndex?: number
+    chromaIdLabel?: string
+  }) => Promise<{ success: boolean; localPath?: string; error?: string }>
+  localFantomeHashtableStatus: () => Promise<{
+    success: boolean
+    exists: boolean
+    path: string
+  }>
+  localFantomeHashtableDownload: () => Promise<{
+    success: boolean
+    path?: string
+    error?: string
+  }>
+  onLocalFantomeProgress: (
+    callback: (p: {
+      current: number
+      total: number
+      skinNumber: number
+      message: string
+      success: boolean | null
+    }) => void
+  ) => () => void
+  onLocalFantomeHashtableProgress: (
+    callback: (p: { loaded: number; total: number; percent: number }) => void
+  ) => () => void
 
   // Window controls
   minimizeWindow: () => void

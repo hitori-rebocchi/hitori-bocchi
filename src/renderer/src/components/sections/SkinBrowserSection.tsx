@@ -1,12 +1,13 @@
 import { useAtom, useSetAtom } from 'jotai'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import AutoSizer from 'react-virtualized-auto-sizer'
 import { VirtualizedSkinGrid } from '../VirtualizedSkinGrid'
 import { FilterPanel } from '../FilterPanel'
 import { GridViewToggle } from '../GridViewToggle'
 import { FileUploadButton } from '../FileUploadButton'
-import { DownloadAllSkinsDialog } from '../DownloadAllSkinsDialog'
-import { DownloadAllSkinsOptionsDialog } from '../DownloadAllSkinsOptionsDialog'
+import { LOCAL_FANTOME_ONLY_MODE } from '../../../../shared/constants/features'
 import { filtersAtom, skinSearchQueryAtom, viewModeAtom } from '../../store/atoms'
 import { showDownloadedSkinsDialogAtom } from '../../store/atoms/ui.atoms'
 import {
@@ -19,7 +20,6 @@ import {
 } from '../../hooks/useOptimizedState'
 import { useChampionData } from '../../hooks/useChampionData'
 import { useSkinManagement } from '../../hooks/useSkinManagement'
-import { useDownloadAllSkins } from '../../hooks/useDownloadAllSkins'
 import type { Champion, Skin } from '../../App'
 
 interface SkinBrowserSectionProps {
@@ -60,27 +60,99 @@ export function SkinBrowserSection({
     deleteCustomSkin
   } = useSkinManagement()
 
-  const {
-    // Options dialog
-    isOptionsDialogOpen,
-    showOptionsDialog,
-    closeOptionsDialog,
+  /**
+   * Click handler for non-downloaded skins. Generates the .fantome from the
+   * user's local WAD on demand, then selects the skin so the patcher run
+   * picks it up. Author defaults to "bocchi" if the user never set one.
+   */
+  const handleGenerateLocal = useCallback(
+    async (champion: Champion, skin: Skin) => {
+      // When the local-only flag is lifted, this becomes a passthrough.
+      if (!LOCAL_FANTOME_ONLY_MODE) {
+        onSkinClick(champion, skin)
+        return
+      }
+      const settings = (await window.api.getSettings()) as Record<string, unknown> | null
+      const author = ((settings?.localFantomeAuthor as string) || 'bocchi').trim() || 'bocchi'
+      const leagueDir = (settings?.localFantomeLeagueDir as string) || undefined
 
-    // Progress dialog
-    isProgressDialogOpen,
-    progress,
-    closeProgressDialog,
+      const toastId = toast.loading(`Generating ${skin.name}…`, {
+        description: `${champion.name} from your local WAD`
+      })
+      try {
+        const res = await window.api.localFantomeGenerateForSkin({
+          championKey: champion.key,
+          skinNum: skin.num,
+          // English name keeps the on-disk filename stable across UI locales —
+          // the apply path and ChromaSelectionDialog match against the EN form.
+          skinName: skin.nameEn || skin.name,
+          author,
+          leagueDir
+        })
+        if (!res?.success) {
+          toast.error(`Failed: ${res?.error ?? 'unknown error'}`, { id: toastId })
+          return
+        }
+        toast.success(`Generated ${skin.name}`, {
+          id: toastId,
+          description: 'Saved to your library'
+        })
+        // Pull the new file into the downloadedSkins list, then select the skin.
+        await loadDownloadedSkins()
+        onSkinClick(champion, skin)
+      } catch (e) {
+        toast.error(`Failed: ${e instanceof Error ? e.message : String(e)}`, { id: toastId })
+      }
+    },
+    [onSkinClick, loadDownloadedSkins]
+  )
 
-    // Download actions
-    startDownloadWithOptions,
-    pauseDownload,
-    resumeDownload,
-    cancelDownload,
-    retryFailedDownloads,
+  /**
+   * Same flow as handleGenerateLocal but for chromas. chromaIndex is the
+   * position in skin.chromaList; the backend uses that to pick the Nth
+   * chroma-of-baseSkin row in the WAD listing (chromaList order == WAD order
+   * for every champion checked so far).
+   */
+  const handleGenerateChroma = useCallback(
+    async (champion: Champion, skin: Skin, chromaId: string, chromaIndex: number) => {
+      if (!LOCAL_FANTOME_ONLY_MODE) {
+        onSkinClick(champion, skin, chromaId)
+        return
+      }
+      const settings = (await window.api.getSettings()) as Record<string, unknown> | null
+      const author = ((settings?.localFantomeAuthor as string) || 'bocchi').trim() || 'bocchi'
+      const leagueDir = (settings?.localFantomeLeagueDir as string) || undefined
 
-    // Utility
-    skinStats
-  } = useDownloadAllSkins()
+      const toastId = toast.loading(`Generating ${skin.name} chroma ${chromaId}…`, {
+        description: `${champion.name} from your local WAD`
+      })
+      try {
+        const res = await window.api.localFantomeGenerateForSkin({
+          championKey: champion.key,
+          skinNum: skin.num,
+          // English name keeps the on-disk filename stable across UI locales.
+          skinName: skin.nameEn || skin.name,
+          author,
+          leagueDir,
+          chromaIndex,
+          chromaIdLabel: chromaId
+        })
+        if (!res?.success) {
+          toast.error(`Failed: ${res?.error ?? 'unknown error'}`, { id: toastId })
+          return
+        }
+        toast.success(`Generated ${skin.name} chroma ${chromaId}`, {
+          id: toastId,
+          description: 'Saved to your library'
+        })
+        await loadDownloadedSkins()
+        onSkinClick(champion, skin, chromaId)
+      } catch (e) {
+        toast.error(`Failed: ${e instanceof Error ? e.message : String(e)}`, { id: toastId })
+      }
+    },
+    [onSkinClick, loadDownloadedSkins]
+  )
 
   if (!championData) return null
 
@@ -110,21 +182,6 @@ export function SkinBrowserSection({
             champions={championData.champions}
             onSkinImported={loadDownloadedSkins}
           />
-          <button
-            onClick={showOptionsDialog}
-            className={styles.manageButton.className}
-            title={t('downloadAll.title')}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
-              />
-            </svg>
-            {t('downloadAll.button')}
-          </button>
           <button
             onClick={() => setShowDownloadedSkinsDialog(true)}
             className={styles.manageButton.className}
@@ -166,6 +223,8 @@ export function SkinBrowserSection({
                     onToggleChromaFavorite={toggleChromaFavorite}
                     onDeleteCustomSkin={deleteCustomSkin}
                     onEditCustomSkin={onEditCustomSkin}
+                    onGenerateLocal={handleGenerateLocal}
+                    onGenerateChroma={handleGenerateChroma}
                     containerWidth={width}
                     containerHeight={height}
                   />
@@ -202,26 +261,6 @@ export function SkinBrowserSection({
           </div>
         )}
       </div>
-
-      {/* Download All Skins Options Dialog */}
-      <DownloadAllSkinsOptionsDialog
-        isOpen={isOptionsDialogOpen}
-        onClose={closeOptionsDialog}
-        onStartDownload={startDownloadWithOptions}
-        totalSkinsCount={skinStats.totalCount}
-        estimatedSize={skinStats.estimatedSize}
-      />
-
-      {/* Download All Skins Progress Dialog */}
-      <DownloadAllSkinsDialog
-        isOpen={isProgressDialogOpen}
-        progress={progress}
-        onPause={pauseDownload}
-        onResume={resumeDownload}
-        onCancel={cancelDownload}
-        onRetry={retryFailedDownloads}
-        onClose={closeProgressDialog}
-      />
     </div>
   )
 }

@@ -8,7 +8,7 @@ import { p2pService } from '../services/p2pService'
 import { p2pFileTransferService } from '../services/p2pFileTransferService'
 import { Badge } from './ui/badge'
 import { useSmartSkinApply } from '../hooks/useSmartSkinApply'
-import { generateSkinFilename } from '../../../shared/utils/skinFilename'
+import { generateSkinFilename, sanitizeSkinNameForPath } from '../../../shared/utils/skinFilename'
 import { SavePresetDialog } from './SavePresetDialog'
 import { presetService } from '../services/presetService'
 import { toast } from 'sonner'
@@ -252,7 +252,9 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
         if (skin.championKey === 'Custom') {
           // Old format: Custom champion
           modPath = downloadedSkins.find(
-            (ds) => ds.championName === 'Custom' && ds.skinName.includes(skin.skinName)
+            (ds) =>
+              ds.championName === 'Custom' &&
+              ds.skinName.includes(sanitizeSkinNameForPath(skin.skinName))
           )?.localPath
         } else if (skin.skinId.startsWith('custom_[User] ')) {
           // New format: Custom mod with champion assigned
@@ -395,7 +397,9 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
       if (skin.championKey === 'Custom') {
         // Old format: Custom champion
         modPath = downloadedSkins.find(
-          (ds) => ds.championName === 'Custom' && ds.skinName.includes(skin.skinName)
+          (ds) =>
+            ds.championName === 'Custom' &&
+            ds.skinName.includes(sanitizeSkinNameForPath(skin.skinName))
         )?.localPath
       } else {
         // New format: Custom mod with champion assigned
@@ -458,11 +462,27 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
       return downloadedSkins.some((ds) => ds.skinName === skin.downloadedFilename)
     }
 
-    // Generate filename for comparison
+    // The on-disk filename for a locally-generated fantome is
+    // `[User] {sanitized name}[ {chromaId}].fantome`. Without recognizing
+    // that form, every selected skin renders with the dimmed "Not Downloaded"
+    // overlay even after the user just generated it on click.
     const skinFileName = getSkinFileName(skin)
+    if (downloadedSkins.some((ds) => ds.skinName === skinFileName)) return true
 
-    // Check if skin is downloaded
-    return downloadedSkins.some((ds) => ds.skinName === skinFileName)
+    const baseFromFile = skinFileName.replace(/\.(zip|fantome|wad\.client|wad)$/i, '')
+    const localizedSan = sanitizeSkinNameForPath(skin.skinName)
+    const suffix = skin.chromaId ? ` ${skin.chromaId}` : ''
+    const bases = new Set<string>([baseFromFile, `${localizedSan}${suffix}`])
+    const exts = ['fantome', 'zip', 'wad', 'wad.client']
+    const userVariants = new Set<string>()
+    for (const base of bases) {
+      for (const ext of exts) {
+        userVariants.add(`[User] ${base}.${ext}`)
+      }
+    }
+    return downloadedSkins.some(
+      (ds) => ds.championName === skin.championKey && userVariants.has(ds.skinName)
+    )
   }
 
   const getSkinFileName = (skin: SelectedSkin): string => {
@@ -514,7 +534,9 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
       let localMod
       if (skin.championKey === 'Custom') {
         localMod = downloadedSkins.find(
-          (ds) => ds.championName === 'Custom' && ds.skinName.includes(skin.skinName)
+          (ds) =>
+            ds.championName === 'Custom' &&
+            ds.skinName.includes(sanitizeSkinNameForPath(skin.skinName))
         )
       } else {
         // Custom mod with champion
@@ -550,8 +572,6 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
 
   // Combine selected skins and auto-synced skins for display
   const allSkinsForDisplay = [...selectedSkins, ...autoSyncedSkins]
-  const downloadedCount = allSkinsForDisplay.filter((skin) => isSkinDownloaded(skin)).length
-  const needsDownload = downloadedCount < allSkinsForDisplay.length
 
   // Get all room members (host + other members), excluding self
   const currentPeerId = p2pService.getCurrentPeerId()
@@ -736,11 +756,6 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
                 {autoSyncedSkins.length > 0 && (
                   <span className="text-sm text-text-secondary">
                     {t('messages.autoSyncedCount', { count: autoSyncedSkins.length })}
-                  </span>
-                )}
-                {needsDownload && (
-                  <span className="text-sm text-text-muted">
-                    {t('skins.toDownload', { count: allSkinsForDisplay.length - downloadedCount })}
                   </span>
                 )}
                 {smartApplySummary && smartApplyEnabled && (
