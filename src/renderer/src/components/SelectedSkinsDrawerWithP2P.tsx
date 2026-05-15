@@ -22,8 +22,10 @@ import {
   Search,
   GitMerge,
   Save,
-  Brush
+  Brush,
+  Zap
 } from 'lucide-react'
+import { autoApplyEnabledAtom } from '../store/atoms/settings.atoms'
 import SortableList, { SortableItem, SortableKnob } from 'react-easy-sort'
 import { arrayMoveImmutable } from 'array-move'
 
@@ -119,6 +121,17 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
   const [, setPresets] = useAtom(presetsAtom)
   const [, setShowPresetsDialog] = useAtom(presetDialogOpenAtom)
   const presetCount = useAtomValue(presetCountAtom)
+  const [autoApplyEnabled, setAutoApplyEnabled] = useAtom(autoApplyEnabledAtom)
+
+  const handleAutoApplyToggle = async () => {
+    const next = !autoApplyEnabled
+    setAutoApplyEnabled(next)
+    try {
+      await window.api.setSettings('autoApplyEnabled', next)
+    } catch (error) {
+      console.error('Failed to save auto apply setting:', error)
+    }
+  }
 
   // Multi-select (delete-only) state
   const [multiSelectMode, setMultiSelectMode] = useState(false)
@@ -138,8 +151,7 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
     teamComposition,
     smartApplyEnabled,
     getSmartApplySummary,
-    isApplying: isSmartApplying,
-    autoApplyEnabled
+    isApplying: isSmartApplying
   } = useSmartSkinApply({
     enabled: true,
     gamePath,
@@ -872,6 +884,34 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
                   </Badge>
                 )}
               </Button>
+              <button
+                type="button"
+                onClick={handleAutoApplyToggle}
+                disabled={loading}
+                aria-pressed={autoApplyEnabled}
+                title={t('settings.autoApply.description')}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  autoApplyEnabled
+                    ? 'bg-primary/10 text-primary hover:bg-primary/20 border-2 border-primary/30'
+                    : 'bg-surface text-text-secondary hover:bg-secondary-100 dark:hover:bg-secondary-800 border border-border shadow-sm dark:shadow-none'
+                }`}
+              >
+                <Zap
+                  className="w-4 h-4"
+                  strokeWidth={autoApplyEnabled ? 2.5 : 2}
+                  fill={autoApplyEnabled ? 'currentColor' : 'none'}
+                />
+                <span>{t('settings.autoApply.title')}</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wider ${
+                    autoApplyEnabled
+                      ? 'bg-primary text-white'
+                      : 'bg-secondary-200 dark:bg-secondary-700 text-text-secondary'
+                  }`}
+                >
+                  {autoApplyEnabled ? t('actions.on') : t('actions.off')}
+                </span>
+              </button>
               <button
                 className={`px-6 py-2 font-medium rounded-lg transition-all duration-200 shadow-soft hover:shadow-medium disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] ${
                   isPatcherRunning

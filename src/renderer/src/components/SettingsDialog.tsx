@@ -18,6 +18,7 @@ import {
 import {
   autoApplyEnabledAtom,
   autoApplyTriggerTimeAtom,
+  autoRandomDownloadedFallbackEnabledAtom,
   championDetectionEnabledAtom,
   leagueClientEnabledAtom,
   smartApplyEnabledAtom
@@ -61,6 +62,8 @@ export function SettingsDialog({
   const [smartApplyEnabled, setSmartApplyEnabled] = useState(true)
   const [autoApplyEnabled, setAutoApplyEnabled] = useState(true)
   const [autoApplyTriggerTime, setAutoApplyTriggerTime] = useState(15)
+  const [autoRandomDownloadedFallbackEnabled, setAutoRandomDownloadedFallbackEnabled] =
+    useState(false)
   const [autoRandomSkinEnabled, setAutoRandomSkinEnabled] = useState(false)
   const [autoRandomRaritySkinEnabled, setAutoRandomRaritySkinEnabled] = useState(false)
   const [autoRandomFavoriteSkinEnabled, setAutoRandomFavoriteSkinEnabled] = useState(false)
@@ -101,6 +104,9 @@ export function SettingsDialog({
   const setAutoApplyEnabledAtom = useSetAtom(autoApplyEnabledAtom)
   const setAutoApplyTriggerTimeAtom = useSetAtom(autoApplyTriggerTimeAtom)
   const setAutoAcceptEnabledAtom = useSetAtom(autoAcceptEnabledAtom)
+  const setAutoRandomDownloadedFallbackEnabledAtom = useSetAtom(
+    autoRandomDownloadedFallbackEnabledAtom
+  )
 
   useEffect(() => {
     if (isOpen) {
@@ -173,6 +179,9 @@ export function SettingsDialog({
       setSmartApplyEnabled((settings.smartApplyEnabled as boolean | undefined) !== false)
       setAutoApplyEnabled((settings.autoApplyEnabled as boolean | undefined) !== false)
       setAutoApplyTriggerTime((settings.autoApplyTriggerTime as number | undefined) || 15)
+      setAutoRandomDownloadedFallbackEnabled(
+        (settings.autoRandomDownloadedFallbackEnabled as boolean | undefined) === true
+      )
       setAutoRandomSkinEnabled((settings.autoRandomSkinEnabled as boolean | undefined) === true)
       setAutoRandomRaritySkinEnabled(
         (settings.autoRandomRaritySkinEnabled as boolean | undefined) === true
@@ -336,6 +345,16 @@ export function SettingsDialog({
       await window.api.setSettings('autoApplyEnabled', checked)
     } catch (error) {
       console.error('Failed to save auto apply setting:', error)
+    }
+  }
+
+  const handleAutoRandomDownloadedFallbackChange = async (checked: boolean) => {
+    setAutoRandomDownloadedFallbackEnabled(checked)
+    setAutoRandomDownloadedFallbackEnabledAtom(checked)
+    try {
+      await window.api.setSettings('autoRandomDownloadedFallbackEnabled', checked)
+    } catch (error) {
+      console.error('Failed to save random downloaded fallback setting:', error)
     }
   }
 
@@ -909,6 +928,23 @@ export function SettingsDialog({
                     />
                   </div>
                 )}
+
+                {/* Random Downloaded Fallback Setting */}
+                <div className="flex items-center justify-between space-x-4">
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-text-primary">
+                      {t('settings.autoRandomDownloadedFallback.title')}
+                    </h3>
+                    <p className="text-xs text-text-secondary mt-1">
+                      {t('settings.autoRandomDownloadedFallback.description')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={autoRandomDownloadedFallbackEnabled}
+                    onCheckedChange={handleAutoRandomDownloadedFallbackChange}
+                    disabled={loading}
+                  />
+                </div>
               </>
             )}
           </TabsContent>

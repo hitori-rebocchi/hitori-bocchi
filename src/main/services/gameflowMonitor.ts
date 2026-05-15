@@ -28,6 +28,7 @@ interface ChampSelectSession {
 export class GameflowMonitor extends EventEmitter {
   private currentPhase: string = 'None'
   private lastLockedChampionId: number | null = null
+  private lastHoveredChampionId: number | null = null
   private monitoringActive: boolean = false
   private sessionCheckInterval: NodeJS.Timeout | null = null
   private missedUpdates: number = 0
@@ -64,6 +65,7 @@ export class GameflowMonitor extends EventEmitter {
     // Reset state
     this.currentPhase = 'None'
     this.lastLockedChampionId = null
+    this.lastHoveredChampionId = null
   }
 
   private setupEventListeners(): void {
@@ -92,6 +94,7 @@ export class GameflowMonitor extends EventEmitter {
     lcuConnector.on('disconnected', () => {
       this.currentPhase = 'None'
       this.lastLockedChampionId = null
+      this.lastHoveredChampionId = null
       this.stopSessionMonitoring()
     })
 
@@ -122,6 +125,7 @@ export class GameflowMonitor extends EventEmitter {
     } else {
       this.stopSessionMonitoring()
       this.lastLockedChampionId = null
+      this.lastHoveredChampionId = null
     }
   }
 
@@ -205,6 +209,7 @@ export class GameflowMonitor extends EventEmitter {
       // Check if this is a newly locked champion
       if (isActuallyLocked && localPlayer.championId !== this.lastLockedChampionId) {
         this.lastLockedChampionId = localPlayer.championId
+        this.lastHoveredChampionId = localPlayer.championId
 
         // Get queue ID
         let queueId = null
@@ -224,7 +229,40 @@ export class GameflowMonitor extends EventEmitter {
           session: session,
           queueId: queueId
         })
+      } else if (!isActuallyLocked && currentChampionId !== this.lastHoveredChampionId) {
+        // Hover/pick-intent change before lock — emit so the renderer can
+        // surface a live preview of who's about to be picked. Skips re-emits
+        // for the same champion to avoid spamming on every session tick.
+        this.lastHoveredChampionId = currentChampionId
+
+        let queueId = null
+        try {
+          const gameflowSession = await lcuConnector.getGameflowSession()
+          if (gameflowSession?.gameData?.queue?.id) {
+            queueId = gameflowSession.gameData.queue.id
+          }
+        } catch (error) {
+          console.log('Failed to get queue ID:', error)
+        }
+
+        this.emit('champion-selected', {
+          championId: currentChampionId,
+          isLocked: false,
+          isHover: true,
+          session: session,
+          queueId: queueId
+        })
       }
+    } else if (this.lastHoveredChampionId !== null) {
+      // Champion deselected during pick phase — clear hover preview.
+      this.lastHoveredChampionId = null
+      this.emit('champion-selected', {
+        championId: 0,
+        isLocked: false,
+        isHover: false,
+        session: session,
+        queueId: null
+      })
     }
   }
 

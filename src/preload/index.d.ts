@@ -254,6 +254,7 @@ export interface IApi {
   checkDllExist: () => Promise<boolean>
   installDllFromFile: () => Promise<{ success: boolean; error?: string }>
   openToolsFolder: () => Promise<{ success: boolean; error?: string }>
+  openDownloadedSkinsFolder: () => Promise<{ success: boolean; error?: string }>
 
   // Local fantome generation (read user's WAD, emit .fantome — no Riot assets bundled)
   localFantomeListChampions: (leagueDir: string) => Promise<{

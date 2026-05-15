@@ -25,7 +25,7 @@ import { P2PProvider } from './contexts/P2PContext'
 
 // Utils
 import { getChampionDisplayName } from './utils/championUtils'
-import { generateSkinFilename } from '../../shared/utils/skinFilename'
+import { generateSkinFilename, sanitizeSkinNameForPath } from '../../shared/utils/skinFilename'
 
 // Hooks
 import { useGameDetection } from './hooks/useGameDetection'
@@ -44,8 +44,12 @@ import { preDownloadedAutoSkinAtom } from './store/atoms'
 import { selectedChampionAtom } from './store/atoms/champion.atoms'
 import { editingCustomSkinAtom, showEditDialogAtom } from './store/atoms/ui.atoms'
 import { appStateSelector, lcuStateSelector } from './store/atoms/selectors.atoms'
-import { championDetectionEnabledAtom } from './store/atoms/settings.atoms'
+import {
+  championDetectionEnabledAtom,
+  autoRandomDownloadedFallbackEnabledAtom
+} from './store/atoms/settings.atoms'
 import { selectedChampionKeyAtom, showFavoritesOnlyAtom, skinSearchQueryAtom } from './store/atoms'
+import { buildUserFantomeCandidates } from '../../shared/utils/userFantomeLookup'
 
 // Types
 export interface Champion {
@@ -105,7 +109,7 @@ function AppContent(): React.JSX.Element {
   const appState = useAtomValue(appStateSelector)
   const { appVersion, errorMessage, statusMessage, isLoading: loading } = appState
   const lcuState = useAtomValue(lcuStateSelector)
-  const { lcuSelectedChampion, autoViewSkinsEnabled } = lcuState
+  const { lcuSelectedChampion, autoViewSkinsEnabled, isChampionLocked } = lcuState
 
   // Only the atoms we need in this component
   const [, setSelectedChampion] = useAtom(selectedChampionAtom)
@@ -164,7 +168,7 @@ function AppContent(): React.JSX.Element {
   )
 
   // Initialize champion select handler
-  const { onChampionNavigate, clearSelectedChampion } = useChampionSelectHandler({
+  const { onChampionNavigate } = useChampionSelectHandler({
     champions: championData?.champions,
     onNavigateToChampion: navigateToChampion,
     enabled: championDetectionEnabled,
@@ -646,13 +650,25 @@ function AppContent(): React.JSX.Element {
     }
   })
 
-  // Handle auto-navigation when champion is selected
+  // Handle auto-navigation when champion is selected.
+  //
+  // We deliberately do NOT call `clearSelectedChampion()` after navigating —
+  // the previous implementation cleared `lcuSelectedChampion` to prevent
+  // re-navigation, which also wiped the pinned entry at the top of the
+  // champion list. Tracking the last-auto-navigated key in a ref achieves
+  // the same dedup while keeping the atom alive so the pinned entry stays
+  // visible for the whole hover/lock lifetime.
+  const lastAutoNavigatedChampionKeyRef = useRef<string | null>(null)
   useEffect(() => {
-    if (lcuSelectedChampion && autoViewSkinsEnabled) {
-      onChampionNavigate()
-      clearSelectedChampion()
+    if (!lcuSelectedChampion) {
+      lastAutoNavigatedChampionKeyRef.current = null
+      return
     }
-  }, [lcuSelectedChampion, autoViewSkinsEnabled, onChampionNavigate, clearSelectedChampion])
+    if (!autoViewSkinsEnabled) return
+    if (lastAutoNavigatedChampionKeyRef.current === lcuSelectedChampion.key) return
+    lastAutoNavigatedChampionKeyRef.current = lcuSelectedChampion.key
+    onChampionNavigate()
+  }, [lcuSelectedChampion, autoViewSkinsEnabled, onChampionNavigate])
 
   // Handle overlay skin selection
   useEffect(() => {
@@ -750,6 +766,92 @@ function AppContent(): React.JSX.Element {
       unsubscribe()
     }
   }, [t])
+
+  // Random downloaded skin fallback: when the LCU champion locks and the user
+  // has no skin selected for that champion, pick a random downloaded one and
+  // add it to selectedSkins. Does nothing if the champion has none downloaded.
+  const autoRandomDownloadedFallbackEnabled = useAtomValue(autoRandomDownloadedFallbackEnabledAtom)
+  const lastFallbackChampionKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!isChampionLocked || !lcuSelectedChampion) {
+      lastFallbackChampionKeyRef.current = null
+      return
+    }
+    if (!autoRandomDownloadedFallbackEnabled) return
+    if (lastFallbackChampionKeyRef.current === lcuSelectedChampion.key) return
+
+    const championKey = lcuSelectedChampion.key
+    const championName = lcuSelectedChampion.name
+
+    const hasSelectionForChampion = selectedSkins.some((s) => s.championKey === championKey)
+    if (hasSelectionForChampion) {
+      lastFallbackChampionKeyRef.current = championKey
+      return
+    }
+
+    const championKeyLower = championKey.toLowerCase()
+    const championNameLower = championName?.toLowerCase()
+    const downloadedForChampion = downloadedSkins.filter((ds) => {
+      const dsChamp = ds.championName?.toLowerCase()
+      return dsChamp === championKeyLower || dsChamp === championNameLower
+    })
+    if (downloadedForChampion.length === 0) {
+      lastFallbackChampionKeyRef.current = championKey
+      return
+    }
+
+    const random = downloadedForChampion[Math.floor(Math.random() * downloadedForChampion.length)]
+
+    // Try to match against an official skin so we get its metadata. If it's a
+    // user-imported file with no official counterpart, fall back to a custom
+    // entry shape that the apply pipeline already understands.
+    const matchedSkin = lcuSelectedChampion.skins.find((skin) => {
+      if (skin.num === 0) return false
+      const expectedZip = `${sanitizeSkinNameForPath(skin.nameEn || skin.name)}.zip`
+      const candidates = buildUserFantomeCandidates(expectedZip, {
+        skinName: skin.name,
+        skinNameEn: skin.nameEn
+      })
+      return candidates.has(random.skinName)
+    })
+
+    const newSelectedSkin = matchedSkin
+      ? {
+          championKey,
+          championName,
+          championId: lcuSelectedChampion.id,
+          skinId: matchedSkin.id,
+          skinName: matchedSkin.name,
+          skinNameEn: matchedSkin.nameEn,
+          skinNum: matchedSkin.num,
+          isDownloaded: true,
+          isAutoSelected: true
+        }
+      : {
+          championKey,
+          championName,
+          championId: lcuSelectedChampion.id,
+          skinId: `custom_${random.skinName}`,
+          skinName: random.skinName,
+          skinNameEn: random.skinName,
+          skinNum: -1,
+          isDownloaded: true,
+          isAutoSelected: true,
+          isCustom: true,
+          localPath: random.localPath
+        }
+
+    lastFallbackChampionKeyRef.current = championKey
+    setSelectedSkins((prev) => [...prev, newSelectedSkin])
+  }, [
+    isChampionLocked,
+    lcuSelectedChampion,
+    autoRandomDownloadedFallbackEnabled,
+    selectedSkins,
+    downloadedSkins,
+    setSelectedSkins
+  ])
 
   // Handle skin click
   const handleSkinClick = useCallback(
