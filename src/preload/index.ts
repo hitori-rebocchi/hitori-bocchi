@@ -173,6 +173,7 @@ const api = {
   checkDllExist: () => ipcRenderer.invoke('check-dll-exist'),
   installDllFromFile: () => ipcRenderer.invoke('install-dll-from-file'),
   openToolsFolder: () => ipcRenderer.invoke('open-tools-folder'),
+  openDownloadedSkinsFolder: () => ipcRenderer.invoke('open-downloaded-skins-folder'),
 
   // Local fantome generation (read user's WAD, emit .fantome — no Riot assets bundled)
   localFantomeListChampions: (leagueDir: string) =>

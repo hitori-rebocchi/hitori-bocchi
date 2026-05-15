@@ -1639,6 +1639,26 @@ function setupIpcHandlers(): void {
     return { success: false, error: 'Tools path not configured' }
   })
 
+  ipcMain.handle('open-downloaded-skins-folder', async () => {
+    // Skins live in `mod-files/` (the unpacked .fantome contents the patcher
+    // reads). `downloaded-skins/` holds raw .zip/.fantome archives the user
+    // wouldn't typically browse. Open the unpacked dir so users can see
+    // generated/imported skins by champion.
+    const skinsPath = path.join(app.getPath('userData'), 'mod-files')
+    try {
+      await fs.promises.mkdir(skinsPath, { recursive: true })
+    } catch (error) {
+      console.error('[open-downloaded-skins-folder] mkdir failed:', error)
+    }
+    console.log('[open-downloaded-skins-folder] opening:', skinsPath)
+    const result = await shell.openPath(skinsPath)
+    if (result) {
+      console.error('[open-downloaded-skins-folder] shell.openPath error:', result)
+      return { success: false, error: result }
+    }
+    return { success: true }
+  })
+
   ipcMain.handle('check-cslol-tools-update', async () => {
     try {
       const updateInfo = await toolsDownloader.checkCslolToolsUpdate()

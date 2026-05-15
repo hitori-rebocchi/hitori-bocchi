@@ -1,8 +1,10 @@
-import React, { forwardRef, useCallback, useImperativeHandle, useRef } from 'react'
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useAtomValue } from 'jotai'
 import { VariableSizeList as List } from 'react-window'
 import type { Champion } from '../App'
 import { getChampionDisplayName, getRomanizedFirstLetter } from '../utils/championUtils'
+import { lcuSelectedChampionAtom } from '../store/atoms/lcu.atoms'
 import {
   Tooltip,
   TooltipContent,
@@ -44,15 +46,22 @@ const VirtualizedChampionListComponent = forwardRef<
   ) => {
     const { t } = useTranslation()
     const listRef = useRef<List>(null)
+    const lcuSelectedChampion = useAtomValue(lcuSelectedChampionAtom)
 
     // Group champions by first letter and create letter indices
     const { groupedChampions, letterIndices, availableLetters } = React.useMemo(() => {
       const items: Array<{
-        type: 'all' | 'custom' | 'divider' | 'letter' | 'champion'
+        type: 'all' | 'custom' | 'divider' | 'letter' | 'champion' | 'lcu-pinned'
         data?: any
       }> = []
       const indices: Record<string, number> = {}
       const letters = new Set<string>()
+
+      // Pin the LCU-selected champion at the very top when one is picked in champ select.
+      if (lcuSelectedChampion) {
+        items.push({ type: 'lcu-pinned', data: lcuSelectedChampion })
+        items.push({ type: 'divider' })
+      }
 
       // Add "All Champions" option
       items.push({ type: 'all' })
@@ -82,7 +91,7 @@ const VirtualizedChampionListComponent = forwardRef<
       }
 
       return { groupedChampions: items, letterIndices: indices, availableLetters: letters }
-    }, [champions, isCollapsed])
+    }, [champions, isCollapsed, lcuSelectedChampion])
 
     // Expose methods via ref
     useImperativeHandle(
@@ -98,18 +107,31 @@ const VirtualizedChampionListComponent = forwardRef<
       [letterIndices, availableLetters, isCollapsed]
     )
 
+    // VariableSizeList caches item heights per index. When `groupedChampions`
+    // changes (e.g. an LCU-pinned entry is prepended or removed) the indices
+    // shift but the cache keeps the old heights, which causes adjacent cards
+    // to render on top of each other. Invalidate the cache whenever the
+    // grouped list changes.
+    useEffect(() => {
+      listRef.current?.resetAfterIndex(0)
+    }, [groupedChampions])
+
     const getItemHeight = (index: number) => {
       const item = groupedChampions[index]
       switch (item.type) {
+        // Card rows: image h-10 (40) + py-3 (24) + border-2 (4) + my-1 (8) = 76.
+        // The old value (64) clipped the my-1 margin so adjacent cards
+        // visually overlapped, especially noticeable for "All"/"Custom" which
+        // sit next to each other without a divider.
         case 'all':
         case 'custom':
-          return 64 // Same height for both modes
-        case 'divider':
-          return 17 // Height for divider
-        case 'letter':
-          return 36 // Height for letter header (not shown in collapsed)
         case 'champion':
-          return 64 // Same height for both modes
+        case 'lcu-pinned':
+          return 76
+        case 'divider':
+          return 17
+        case 'letter':
+          return 36
         default:
           return 0
       }
@@ -220,6 +242,84 @@ const VirtualizedChampionListComponent = forwardRef<
                 <div className="mx-6 my-2 border-b border-border"></div>
               </div>
             )
+
+          case 'lcu-pinned': {
+            const champion = item.data as Champion
+            const isActive = selectedChampion?.key === champion.key
+            const dotIndicator = (
+              <span
+                className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-primary-500 border-2 border-surface"
+                aria-hidden="true"
+              />
+            )
+            return (
+              <div style={style}>
+                {isCollapsed ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className={`relative flex items-center justify-center px-3 py-3 cursor-pointer transition-all duration-200 mx-2 my-1 rounded-lg border-2
+                        ${
+                          isActive
+                            ? 'bg-primary-500 text-white shadow-md dark:shadow-dark-soft border-primary-600 scale-[1.02]'
+                            : 'bg-primary/5 hover:bg-primary/10 text-text-primary border-primary/30'
+                        }`}
+                          onClick={() => onChampionSelect(champion, champion.key)}
+                        >
+                          <img
+                            src={champion.image}
+                            alt={getChampionDisplayName(champion)}
+                            className="w-10 h-10 rounded-lg object-cover"
+                            loading="lazy"
+                          />
+                          {dotIndicator}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipPortal>
+                        <TooltipContent side="right" sideOffset={5}>
+                          <p className="font-medium">{champion.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t('champion.lcuPinnedHint')}
+                          </p>
+                        </TooltipContent>
+                      </TooltipPortal>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <div
+                    className={`relative flex items-center gap-3 px-6 py-3 cursor-pointer transition-all duration-200 mx-3 my-1 rounded-lg border-2
+                  ${
+                    isActive
+                      ? 'bg-primary-500 text-white shadow-md dark:shadow-dark-soft border-primary-600 scale-[1.02]'
+                      : 'bg-primary/5 hover:bg-primary/10 text-text-primary border-primary/30'
+                  }`}
+                    onClick={() => onChampionSelect(champion, champion.key)}
+                  >
+                    <div className="relative">
+                      <img
+                        src={champion.image}
+                        alt={getChampionDisplayName(champion)}
+                        className="w-10 h-10 rounded-lg"
+                        loading="lazy"
+                      />
+                      {dotIndicator}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">{champion.name}</span>
+                      <span
+                        className={`text-[10px] font-semibold tracking-wider uppercase ${
+                          isActive ? 'text-white/80' : 'text-primary'
+                        }`}
+                      >
+                        {t('champion.lcuPinnedLabel')}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          }
 
           case 'letter':
             return (

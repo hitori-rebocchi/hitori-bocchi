@@ -6,6 +6,8 @@
   },
   "actions": {
     "browse": "Browse",
+    "on": "ON",
+    "off": "OFF",
     "download": "Download",
     "update": "Update",
     "apply": "Apply",
@@ -53,7 +55,9 @@
     "updateData": "Update Data",
     "version": "Version",
     "allChampions": "All Champions",
-    "customMods": "Custom Mods"
+    "customMods": "Custom Mods",
+    "lcuPinnedLabel": "In game",
+    "lcuPinnedHint": "Currently picked in League — click to view"
   },
   "skin": {
     "searchPlaceholder": "Search skins across all champions...",
@@ -185,6 +189,10 @@
     "autoApplyTriggerTime": {
       "title": "Auto Apply Trigger Time",
       "description": "Seconds before game starts to automatically apply skins (5-30 seconds)"
+    },
+    "autoRandomDownloadedFallback": {
+      "title": "Random downloaded skin fallback",
+      "description": "When a champion is locked in League and no skin is selected for them, pick a random one from your downloaded skins for that champion. Does nothing if the champion has no downloaded skins."
     },
     "autoAccept": {
       "title": "Auto Accept Match",
@@ -469,6 +477,8 @@
     "roomSkins": "Room Skins",
     "manage": "Manage",
     "manageDownloaded": "Manage downloaded skins",
+    "openFolder": "Open downloaded skins folder",
+    "openFolderFailed": "Failed to open downloaded skins folder",
     "downloadedCount": "Downloaded Skins ({{count}})",
     "allSkins": "All Skins",
     "autoSelected": "Auto",

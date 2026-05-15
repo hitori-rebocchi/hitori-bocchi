@@ -12,7 +12,8 @@ import {
   championDetectionEnabledAtom,
   smartApplyEnabledAtom,
   autoApplyEnabledAtom,
-  autoApplyTriggerTimeAtom
+  autoApplyTriggerTimeAtom,
+  autoRandomDownloadedFallbackEnabledAtom
 } from '../store/atoms/settings.atoms'
 import { presetsAtom } from '../store/atoms/presets'
 import { presetService } from '../services/presetService'
@@ -54,6 +55,7 @@ export function useAppInitialization() {
   const setSmartApplyEnabled = useSetAtom(smartApplyEnabledAtom)
   const setAutoApplyEnabled = useSetAtom(autoApplyEnabledAtom)
   const setAutoApplyTriggerTime = useSetAtom(autoApplyTriggerTimeAtom)
+  const setAutoRandomDownloadedFallbackEnabled = useSetAtom(autoRandomDownloadedFallbackEnabledAtom)
   const setAutoAcceptEnabled = useSetAtom(autoAcceptEnabledAtom)
   const setAutoPickEnabled = useSetAtom(autoPickEnabledAtom)
   const setAutoPickForce = useSetAtom(autoPickForceAtom)
@@ -166,6 +168,7 @@ export function useAppInitialization() {
       window.api.getSettings('smartApplyEnabled'),
       window.api.getSettings('autoApplyEnabled'),
       window.api.getSettings('autoApplyTriggerTime'),
+      window.api.getSettings('autoRandomDownloadedFallbackEnabled'),
       window.api.getSettings('autoAcceptEnabled'),
       window.api.getSettings('autoPickEnabled'),
       window.api.getSettings('autoPickForce'),
@@ -186,6 +189,7 @@ export function useAppInitialization() {
         smartApply,
         autoApply,
         autoApplyTriggerTime,
+        autoRandomDownloadedFallback,
         autoAccept,
         autoPickEnabled,
         autoPickForce,
@@ -205,6 +209,7 @@ export function useAppInitialization() {
         setSmartApplyEnabled(smartApply !== false) // Default to true
         setAutoApplyEnabled(autoApply !== false) // Default to true
         setAutoApplyTriggerTime((autoApplyTriggerTime as number | undefined) || 15) // Default to 15 seconds
+        setAutoRandomDownloadedFallbackEnabled(autoRandomDownloadedFallback === true)
         setAutoAcceptEnabled(autoAccept === true)
         setAutoPickEnabled(autoPickEnabled === true)
         setAutoPickForce(autoPickForce === true)
@@ -226,6 +231,7 @@ export function useAppInitialization() {
     setSmartApplyEnabled,
     setAutoApplyEnabled,
     setAutoApplyTriggerTime,
+    setAutoRandomDownloadedFallbackEnabled,
     setAutoAcceptEnabled,
     setAutoPickEnabled,
     setAutoPickForce,

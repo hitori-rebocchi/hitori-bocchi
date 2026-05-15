@@ -13,6 +13,7 @@ import { favoritesAtom, downloadedSkinsAtom } from './skin.atoms'
 import type { Champion, Skin } from '../../App'
 import { getChampionDisplayName } from '../../utils/championUtils'
 import { sanitizeSkinNameForPath } from '../../../../shared/utils/skinFilename'
+import { buildUserFantomeCandidates } from '../../../../shared/utils/userFantomeLookup'
 
 // Helper function to check if a skin or any of its chromas are favorited
 function isSkinOrChromaFavorited(
@@ -389,9 +390,13 @@ export const skinStatsAtom = atom((get) => {
         if (skin.num !== 0) {
           total++
           const skinFileName = `${sanitizeSkinNameForPath(skin.nameEn || skin.name)}.zip`
+          const candidates = buildUserFantomeCandidates(skinFileName, {
+            skinName: skin.name,
+            skinNameEn: skin.nameEn
+          })
           if (
             downloadedSkins.some(
-              (ds) => ds.championName === champion.key && ds.skinName === skinFileName
+              (ds) => ds.championName === champion.key && candidates.has(ds.skinName)
             )
           ) {
             downloaded++

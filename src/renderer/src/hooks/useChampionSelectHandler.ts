@@ -61,7 +61,7 @@ export function useChampionSelectHandler({
   const setSelectedChampionKey = useSetAtom(selectedChampionKeyAtom)
   const setCurrentQueueId = useSetAtom(currentQueueIdAtom)
 
-  const lastSelectedChampionIdRef = useRef<number | null>(null)
+  const lastSelectedChampionIdRef = useRef<string | null>(null)
   const gameflowPhaseRef = useRef<string>('None')
 
   // Settings are now loaded in useAppInitialization hook
@@ -144,6 +144,14 @@ export function useChampionSelectHandler({
         return
       }
 
+      // Deselect (championId 0) clears the pinned preview.
+      if (!data.championId) {
+        setLcuSelectedChampion(null)
+        setIsChampionLocked(false)
+        lastSelectedChampionIdRef.current = null
+        return
+      }
+
       if (!champions || champions.length === 0) {
         // Store the event data to retry when champions are loaded
         setTimeout(() => {
@@ -154,13 +162,6 @@ export function useChampionSelectHandler({
         return
       }
 
-      // Avoid duplicate notifications
-      if (lastSelectedChampionIdRef.current === data.championId) {
-        return
-      }
-
-      lastSelectedChampionIdRef.current = data.championId
-
       // Find the champion by ID
       const champion = champions.find((c) => c.id === data.championId)
       if (!champion) {
@@ -168,13 +169,29 @@ export function useChampionSelectHandler({
         return
       }
 
-      // Set the selected champion data in atoms
+      // Always update atoms — hover or lock both refresh the pinned entry +
+      // lock flag. Atom setters short-circuit if the value is unchanged.
       setLcuSelectedChampion(champion)
       setIsChampionLocked(data.isLocked)
 
       // Update current queue ID if available
       if (data.queueId !== undefined && data.queueId !== null) {
         setCurrentQueueId(data.queueId)
+      }
+
+      // Dedupe side effects on the (championId, isLocked) tuple so a
+      // hover→lock transition for the same champion still fires auto-random
+      // once on lock.
+      const dedupKey = `${data.championId}-${data.isLocked ? 'L' : 'H'}`
+      if (lastSelectedChampionIdRef.current === dedupKey) {
+        return
+      }
+      lastSelectedChampionIdRef.current = dedupKey
+
+      // Auto-random skin selection only on lock — hover would re-roll on
+      // every champion switch, which isn't what the user wants.
+      if (!data.isLocked) {
+        return
       }
 
       // Skip auto random skin for modes with preselected champions (no champion select phase)
