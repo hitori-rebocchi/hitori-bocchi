@@ -10,6 +10,7 @@ export class UpdaterService {
   constructor() {
     autoUpdater.autoDownload = false
     autoUpdater.autoRunAppAfterInstall = true
+    autoUpdater.forceDevUpdateConfig = true
 
     this.setupEventListeners()
   }
