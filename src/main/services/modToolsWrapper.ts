@@ -31,29 +31,12 @@ export class ModToolsWrapper {
     this.mainWindow = window
   }
 
-  private pathContainsOneDrive(filePath: string): boolean {
-    return filePath.toLowerCase().includes('onedrive')
-  }
-
-  // The patcher runs as ltk-manager.exe (the sidecar's real name; see
-  // native/bocchi-overlay/Cargo.toml). mod-tools.exe and bocchi-overlay.exe
-  // are legacy names from older installs (pre-cleanup), kept in the kill
-  // list so upgrades don't leave a stray process running.
   private async forceKillStaleProcesses(): Promise<void> {
-    const targets = ['mod-tools.exe', 'ltk-manager.exe', 'bocchi-overlay.exe']
-    await Promise.all(
-      targets.map(
-        (name) =>
-          new Promise<void>((resolve) => {
-            const proc = spawn('taskkill', ['/F', '/IM', name])
-            proc.on('close', () => resolve())
-            proc.on('error', () => resolve())
-          })
-      )
-    )
-    console.log(
-      `[ModToolsWrapper] Attempted to kill stale patcher processes: ${targets.join(', ')}`
-    )
+    await new Promise<void>((resolve) => {
+      const proc = spawn('taskkill', ['/F', '/IM', 'ltk-manager.exe'])
+      proc.on('close', () => resolve())
+      proc.on('error', () => resolve())
+    })
   }
 
   async checkDllExist(): Promise<boolean> {
@@ -194,25 +177,7 @@ export class ModToolsWrapper {
     this.importedMods = []
 
     try {
-      const dllExists = await this.checkDllExist()
-      if (!dllExists) {
-        return {
-          success: false,
-          message:
-            'cslol-dll.dll not found. Use "Browse for DLL" in the tools modal or download the CS:LOL tools.'
-        }
-      }
-
       await this.stopOverlay()
-
-      if (
-        this.pathContainsOneDrive(this.installedPath) ||
-        this.pathContainsOneDrive(this.profilesPath)
-      ) {
-        console.warn(
-          '[ModToolsWrapper] OneDrive detected in path - this may cause file access issues'
-        )
-      }
 
       console.debug('[ModToolsWrapper] Preparing directories')
       await fs.rm(this.profilesPath, { recursive: true, force: true }).catch(() => {})
@@ -282,8 +247,6 @@ export class ModToolsWrapper {
       console.debug('[ModToolsWrapper] Executing bocchi-overlay mkoverlay')
       await this.execToolWithTimeout(overlayBinForBuild, mkoverlayArgs, this.timeout, true)
       console.info('[ModToolsWrapper] Overlay created successfully')
-
-      await new Promise((resolve) => setTimeout(resolve, 200))
 
       // Check for cancellation before starting runoverlay
       if (this.isCancelled) {
