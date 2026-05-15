@@ -178,7 +178,7 @@ export function ToolsDownloadModal() {
 
             <p className="text-text-secondary leading-relaxed text-xs">
               The DLL from the LeagueToolkit/ltk-manager (successor to cslol-manager) is
-              ABI-compatible with the bundled mod-tools.exe runoverlay command. Pick a signed{' '}
+              ABI-compatible with the bocchi-overlay patcher Bocchi ships with. Pick a signed{' '}
               <code className="px-1 py-0.5 bg-secondary-800 rounded">cslol-dll.dll</code> below and
               Bocchi will copy it into the tools folder.
             </p>

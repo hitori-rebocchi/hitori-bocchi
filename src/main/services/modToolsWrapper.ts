@@ -3,67 +3,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import { app, BrowserWindow } from 'electron'
 import { settingsService } from './settingsService'
-import { isPackagedApp } from '../utils/isPackagedApp'
-
-function getBocchiOverlayPath(): string {
-  const inDev = !isPackagedApp()
-  if (inDev) {
-    // In dev, the binary lives at native/bocchi-overlay/target/release/.
-    return path.join(
-      app.getAppPath(),
-      'native',
-      'bocchi-overlay',
-      'target',
-      'release',
-      'bocchi-overlay.exe'
-    )
-  }
-  // In production, electron-builder ships it under resources/.
-  return path.join(process.resourcesPath, 'bocchi-overlay.exe')
-}
-
-/**
- * Stage the sidecar binary and DLL together in a per-run dir before
- * invoking the patcher. Same bytes as the bocchi-overlay we ship in
- * resources; we just normalize the on-disk filenames so the DLL load
- * layout is reproducible between dev and packaged builds.
- */
-async function stageHostShim(toolsPath: string): Promise<{ binary: string; dll: string }> {
-  const srcBin = getBocchiOverlayPath()
-  const srcDll = path.join(toolsPath, 'cslol-dll.dll')
-  const stageDir = path.join(app.getPath('userData'), 'patcher-runtime')
-  const dstBin = path.join(stageDir, 'ltk-manager.exe')
-  const dstDll = path.join(stageDir, 'cslol-dll.dll')
-
-  console.log('[stageHostShim] srcBin =', srcBin)
-  console.log('[stageHostShim] srcDll =', srcDll)
-  console.log('[stageHostShim] stageDir =', stageDir)
-
-  try {
-    const srcBinStat = await fs.stat(srcBin)
-    console.log(`[stageHostShim] srcBin size = ${srcBinStat.size} bytes`)
-  } catch (e) {
-    console.error(`[stageHostShim] srcBin MISSING: ${srcBin}`, e)
-    throw new Error(`bocchi-overlay sidecar not found at ${srcBin}`)
-  }
-  try {
-    const srcDllStat = await fs.stat(srcDll)
-    console.log(`[stageHostShim] srcDll size = ${srcDllStat.size} bytes`)
-  } catch (e) {
-    console.error(`[stageHostShim] srcDll MISSING: ${srcDll}`, e)
-    throw new Error(
-      `cslol-dll.dll not found at ${srcDll}. Use "Browse for DLL" in the tools modal to install it.`
-    )
-  }
-
-  await fs.mkdir(stageDir, { recursive: true })
-
-  // Always refresh, dev rebuilds change the sidecar bytes.
-  await fs.copyFile(srcBin, dstBin)
-  await fs.copyFile(srcDll, dstDll)
-  console.log(`[stageHostShim] staged OK: ${dstBin} + ${dstDll}`)
-  return { binary: dstBin, dll: dstDll }
-}
+import { getSidecarPath } from '../utils/sidecarPath'
 
 export class ModToolsWrapper {
   private profilesPath: string
@@ -83,12 +23,6 @@ export class ModToolsWrapper {
     this.installedPath = path.join(userData, 'cslol_installed')
   }
 
-  private getModToolsExePath(): string | null {
-    const toolsPath = settingsService.getModToolsPath()
-    if (!toolsPath) return null
-    return path.join(toolsPath, 'mod-tools.exe')
-  }
-
   setToolsTimeout(seconds: number): void {
     this.timeout = seconds * 1000 // Convert seconds to milliseconds
   }
@@ -97,30 +31,29 @@ export class ModToolsWrapper {
     this.mainWindow = window
   }
 
-  async checkModToolsExist(): Promise<boolean> {
-    try {
-      const modToolsPath = this.getModToolsExePath()
-      if (!modToolsPath) return false
-
-      await fs.access(modToolsPath, fs.constants.F_OK)
-      return true
-    } catch {
-      return false
-    }
-  }
-
   private pathContainsOneDrive(filePath: string): boolean {
     return filePath.toLowerCase().includes('onedrive')
   }
 
-  private async forceKillModTools(): Promise<void> {
-    return new Promise((resolve) => {
-      const process = spawn('taskkill', ['/F', '/IM', 'mod-tools.exe'])
-      process.on('close', () => {
-        console.log(`[ModToolsWrapper] Attempted to kill all mod-tools.exe processes.`)
-        resolve()
-      })
-    })
+  // The patcher runs as ltk-manager.exe (the sidecar's real name; see
+  // native/bocchi-overlay/Cargo.toml). mod-tools.exe and bocchi-overlay.exe
+  // are legacy names from older installs (pre-cleanup), kept in the kill
+  // list so upgrades don't leave a stray process running.
+  private async forceKillStaleProcesses(): Promise<void> {
+    const targets = ['mod-tools.exe', 'ltk-manager.exe', 'bocchi-overlay.exe']
+    await Promise.all(
+      targets.map(
+        (name) =>
+          new Promise<void>((resolve) => {
+            const proc = spawn('taskkill', ['/F', '/IM', name])
+            proc.on('close', () => resolve())
+            proc.on('error', () => resolve())
+          })
+      )
+    )
+    console.log(
+      `[ModToolsWrapper] Attempted to kill stale patcher processes: ${targets.join(', ')}`
+    )
   }
 
   async checkDllExist(): Promise<boolean> {
@@ -275,9 +208,13 @@ export class ModToolsWrapper {
     this.importedMods = []
 
     try {
-      const toolsExist = await this.checkModToolsExist()
-      if (!toolsExist) {
-        return { success: false, message: 'CS:LOL tools not found. Please download them first.' }
+      const dllExists = await this.checkDllExist()
+      if (!dllExists) {
+        return {
+          success: false,
+          message:
+            'cslol-dll.dll not found. Use "Browse for DLL" in the tools modal or download the CS:LOL tools.'
+        }
       }
 
       await this.stopOverlay()
@@ -318,7 +255,7 @@ export class ModToolsWrapper {
       }
 
       console.info('[ModToolsWrapper] Creating overlay via bocchi-overlay...')
-      const overlayBinForBuild = getBocchiOverlayPath()
+      const overlayBinForBuild = getSidecarPath()
       try {
         await fs.access(overlayBinForBuild)
       } catch {
@@ -402,24 +339,22 @@ export class ModToolsWrapper {
           `cslol-dll.dll not found at ${dllProbe}. Use the "Browse for DLL" button in the tools modal to install it.`
         )
       }
-      const srcBin = getBocchiOverlayPath()
+      const sidecarBin = getSidecarPath()
       try {
-        await fs.access(srcBin)
+        await fs.access(sidecarBin)
       } catch {
         throw new Error(
-          `bocchi-overlay sidecar not found at ${srcBin}. Build it with: cargo build --release --manifest-path native/bocchi-overlay/Cargo.toml`
+          `Sidecar not found at ${sidecarBin}. Build it with: cargo build --release --manifest-path native/bocchi-overlay/Cargo.toml`
         )
       }
 
-      const stage = await stageHostShim(toolsPath)
-
-      console.info(`[ModToolsWrapper] Starting patcher via bocchi-overlay`)
+      console.info('[ModToolsWrapper] Starting patcher via ltk-manager sidecar')
       this.runningProcess = spawn(
-        stage.binary,
+        sidecarBin,
         [
           'patcher',
           '--dll',
-          stage.dll,
+          dllProbe,
           '--overlay-root',
           path.normalize(profilePath),
           '--flags',
@@ -508,7 +443,7 @@ export class ModToolsWrapper {
       }
       this.runningProcess = null
     }
-    await this.forceKillModTools()
+    await this.forceKillStaleProcesses()
   }
 
   isRunning(): boolean {
@@ -627,8 +562,7 @@ export class ModToolsWrapper {
     }
     this.activeProcesses = []
 
-    // Force kill all mod-tools processes
-    await this.forceKillModTools()
+    await this.forceKillStaleProcesses()
 
     // Optionally cleanup partially imported mods
     if (this.importedMods.length > 0) {

@@ -3,12 +3,16 @@ import { app } from 'electron'
 import { isPackagedApp } from './isPackagedApp'
 
 /**
- * Resolve the absolute path to the `bocchi-overlay` sidecar binary.
+ * Resolve the absolute path to the sidecar binary (`ltk-manager.exe`).
  *
- * Dev mode:    `native/bocchi-overlay/target/release/bocchi-overlay.exe`
- * Production:  `<resourcesPath>/bocchi-overlay.exe`
+ * The Rust crate lives at `native/bocchi-overlay/` but Cargo emits the
+ * binary as `ltk-manager.exe` — see `native/bocchi-overlay/Cargo.toml`
+ * for the rationale (cslol-dll AH check; memory/cslol_dll_ah_check.md).
+ *
+ * Dev mode:    `native/bocchi-overlay/target/release/ltk-manager.exe`
+ * Production:  `<resourcesPath>/ltk-manager.exe`
  */
-export function getBocchiOverlayPath(): string {
+export function getSidecarPath(): string {
   if (!isPackagedApp()) {
     return path.join(
       app.getAppPath(),
@@ -16,8 +20,8 @@ export function getBocchiOverlayPath(): string {
       'bocchi-overlay',
       'target',
       'release',
-      'bocchi-overlay.exe'
+      'ltk-manager.exe'
     )
   }
-  return path.join(process.resourcesPath, 'bocchi-overlay.exe')
+  return path.join(process.resourcesPath, 'ltk-manager.exe')
 }

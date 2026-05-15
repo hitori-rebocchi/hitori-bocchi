@@ -7,7 +7,11 @@ description = "Bocchi sidecar that reads .fantome / .modpkg archives and builds 
 publish = false
 
 [[bin]]
-name = "bocchi-overlay"
+# Binary is named `ltk-manager` because cslol-dll's anti-hack check
+# (run post-injection inside League's process) hardcodes the expected
+# host process name. Renaming this to anything else breaks inject with
+# `AH Result: C0000229`. See memory/cslol_dll_ah_check.md.
+name = "ltk-manager"
 path = "src/main.rs"
 
 [features]

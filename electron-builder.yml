@@ -35,9 +35,12 @@ asarUnpack:
 extraResources:
   # Native Rust sidecar — build with:
   #   cargo build --release --manifest-path native/bocchi-overlay/Cargo.toml
-  # Resolves to `process.resourcesPath/bocchi-overlay.exe` at runtime.
-  - from: native/bocchi-overlay/target/release/bocchi-overlay.exe
-    to: bocchi-overlay.exe
+  # Resolves to `process.resourcesPath/ltk-manager.exe` at runtime.
+  # The binary is named `ltk-manager.exe` (not bocchi-overlay.exe) because
+  # cslol-dll hardcodes that host process name in its AH check. See
+  # memory/cslol_dll_ah_check.md.
+  - from: native/bocchi-overlay/target/release/ltk-manager.exe
+    to: ltk-manager.exe
 win:
   # Keep dev and packaged builds running under the same host binary name
   # so native sidecars behave identically in both. User-facing shortcut
