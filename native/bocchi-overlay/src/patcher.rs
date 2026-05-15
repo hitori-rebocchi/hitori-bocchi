@@ -5,8 +5,7 @@ use std::time::{Duration, Instant};
 
 use libloading::Library;
 
-/// Default timeout for hook initialization (5 minutes in ms).
-pub const DEFAULT_HOOK_TIMEOUT_MS: u32 = 300_000;
+pub const DEFAULT_HOOK_TIMEOUT_MS: u32 = 30_000;
 pub const HOOK_STEP_MS: u32 = 100;
 
 #[repr(u64)]
