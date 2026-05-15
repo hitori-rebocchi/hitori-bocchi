@@ -10,6 +10,14 @@ export class UpdaterService {
   constructor() {
     autoUpdater.autoDownload = false
     autoUpdater.autoRunAppAfterInstall = true
+    // electron-builder ships the installed binary as `electron.exe` (see
+    // `win.executableName` in electron-builder.yml), which Electron treats
+    // as "running from the default electron CLI" → `app.isPackaged` is
+    // false → electron-updater otherwise skips with "application is not
+    // packed". Forcing the dev config makes the check run regardless, and
+    // dev-app-update.yml carries the same GitHub publish config as the
+    // packed app-update.yml, so both modes resolve to the right release.
+    autoUpdater.forceDevUpdateConfig = true
 
     this.setupEventListeners()
   }
