@@ -13,8 +13,12 @@ use std::time::{Duration, Instant};
 
 use libloading::Library;
 
-/// Default timeout for hook initialization (5 minutes in ms).
-pub const DEFAULT_HOOK_TIMEOUT_MS: u32 = 300_000;
+/// Default timeout for hook initialization (30 seconds in ms).
+///
+/// With the sidecar signed Authenticode + named `ltk-manager.exe`, Vanguard's
+/// fast-path applies and `cslol_hook` lands in ~100ms. 30s is generous
+/// headroom while still giving fast feedback if anything regresses.
+pub const DEFAULT_HOOK_TIMEOUT_MS: u32 = 30_000;
 /// Step interval for the hook loop (ms).
 pub const HOOK_STEP_MS: u32 = 100;
 
