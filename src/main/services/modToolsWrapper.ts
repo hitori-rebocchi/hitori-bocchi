@@ -87,20 +87,6 @@ export class ModToolsWrapper {
     }
   }
 
-  private async ensureCleanDirectoryWithRetry(dirPath: string, retries = 3): Promise<void> {
-    for (let i = 0; i < retries; i++) {
-      try {
-        await fs.rm(dirPath, { recursive: true, force: true }).catch(() => {})
-        await fs.mkdir(dirPath, { recursive: true })
-        return
-      } catch (error) {
-        console.warn(`[ModToolsWrapper] Clean directory attempt ${i + 1} failed for ${dirPath}`)
-        if (i === retries - 1) throw error
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-      }
-    }
-  }
-
   private async execToolWithTimeout(
     command: string,
     args: string[],
@@ -229,7 +215,8 @@ export class ModToolsWrapper {
       }
 
       console.debug('[ModToolsWrapper] Preparing directories')
-      await this.ensureCleanDirectoryWithRetry(this.profilesPath)
+      await fs.rm(this.profilesPath, { recursive: true, force: true }).catch(() => {})
+      await fs.mkdir(this.profilesPath, { recursive: true })
 
       // Create installed directory if it doesn't exist (don't clean it to preserve imported mods)
       await fs.mkdir(this.installedPath, { recursive: true }).catch(() => {})
@@ -282,43 +269,19 @@ export class ModToolsWrapper {
       }
       console.info(`[ModToolsWrapper] Overlay inputs: ${fantomePaths.length} fantome(s)`)
 
-      let overlaySuccess = false
-      let mkOverlayError: Error | null = null
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          if (attempt > 1) {
-            console.info(`[ModToolsWrapper] Retrying overlay creation, attempt ${attempt}/3`)
-            await new Promise((resolve) => setTimeout(resolve, 500))
-          }
-          const mkoverlayArgs = [
-            'mkoverlay',
-            '--game',
-            path.normalize(preset.gamePath),
-            '--overlay',
-            path.normalize(profilePath),
-            '--state',
-            path.normalize(overlayStateDir),
-            ...fantomePaths.flatMap((p) => ['--mod', p])
-          ]
-          console.debug(`[ModToolsWrapper] Executing bocchi-overlay mkoverlay (attempt ${attempt})`)
-          await this.execToolWithTimeout(overlayBinForBuild, mkoverlayArgs, this.timeout, true)
-          overlaySuccess = true
-          console.info('[ModToolsWrapper] Overlay created successfully')
-          break
-        } catch (error) {
-          mkOverlayError = error as Error
-          console.error(
-            `[ModToolsWrapper] Overlay creation attempt ${attempt} failed:`,
-            error as Error
-          )
-        }
-      }
-
-      if (!overlaySuccess) {
-        throw new Error(
-          `Failed to create overlay after 3 attempts: ${mkOverlayError?.message || 'Unknown mkoverlay error'}`
-        )
-      }
+      const mkoverlayArgs = [
+        'mkoverlay',
+        '--game',
+        path.normalize(preset.gamePath),
+        '--overlay',
+        path.normalize(profilePath),
+        '--state',
+        path.normalize(overlayStateDir),
+        ...fantomePaths.flatMap((p) => ['--mod', p])
+      ]
+      console.debug('[ModToolsWrapper] Executing bocchi-overlay mkoverlay')
+      await this.execToolWithTimeout(overlayBinForBuild, mkoverlayArgs, this.timeout, true)
+      console.info('[ModToolsWrapper] Overlay created successfully')
 
       await new Promise((resolve) => setTimeout(resolve, 200))
 
