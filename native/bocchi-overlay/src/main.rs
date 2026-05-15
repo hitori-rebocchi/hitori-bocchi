@@ -97,7 +97,13 @@ fn main() -> Result<()> {
             log_file,
             timeout_ms,
             flags,
-        } => cmd_patcher(&dll, &overlay_root, log_file.as_deref(), timeout_ms, flags),
+        } => cmd_patcher(
+            &dll,
+            &overlay_root,
+            log_file.as_deref(),
+            timeout_ms,
+            flags,
+        ),
     }
 }
 

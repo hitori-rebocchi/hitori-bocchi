@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { getBocchiOverlayPath } from '../utils/sidecarPath'
+import { getSidecarPath } from '../utils/sidecarPath'
 
 export interface GenerationItem {
   skinNumber: number
@@ -41,7 +41,7 @@ export async function generateFantomes(
   if (!request.outputDir || request.outputDir.trim().length === 0) {
     throw new Error('outputDir is required')
   }
-  const sidecar = getBocchiOverlayPath()
+  const sidecar = getSidecarPath()
   const total = request.items.length
 
   if (onProgress) {

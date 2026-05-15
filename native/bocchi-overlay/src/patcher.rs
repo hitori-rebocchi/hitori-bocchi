@@ -251,6 +251,7 @@ pub fn run_patcher_loop(
         };
 
         eprintln!("[PATCHER] Game found (thread id: {})", tid);
+
         eprintln!(
             "[PATCHER] Applying hook (timeout={}ms, step={}ms)...",
             timeout_ms, HOOK_STEP_MS

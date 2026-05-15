@@ -2388,7 +2388,7 @@ function setupIpcHandlers(): void {
       const toolsExist = await toolsDownloader.checkToolsExist()
       if (!toolsExist) {
         // Download tools automatically with progress reporting
-        sendStatus('Downloading cslol-tools (mod-tools.exe) for mod extraction...')
+        sendStatus('Downloading cslol-tools (cslol-dll.dll) for the patcher...')
         try {
           await toolsDownloader.downloadAndExtractTools((progress, details) => {
             // Send progress to renderer

@@ -30,11 +30,8 @@ files:
 asarUnpack:
   - resources/**
 extraResources:
-  # Native Rust sidecar — build with:
-  #   cargo build --release --manifest-path native/bocchi-overlay/Cargo.toml
-  # Resolves to `process.resourcesPath/bocchi-overlay.exe` at runtime.
-  - from: native/bocchi-overlay/target/release/bocchi-overlay.exe
-    to: bocchi-overlay.exe
+  - from: native/bocchi-overlay/target/release/ltk-manager.exe
+    to: ltk-manager.exe
 win:
   executableName: electron
   target:

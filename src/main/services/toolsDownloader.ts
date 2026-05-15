@@ -56,8 +56,10 @@ export class ToolsDownloader {
       const toolsPath = settingsService.getModToolsPath()
       if (!toolsPath) return false
 
-      const modToolsPath = path.join(toolsPath, 'mod-tools.exe')
-      await fs.promises.access(modToolsPath, fs.constants.F_OK)
+      // The patcher now uses bocchi-overlay.exe; the only file we need from the
+      // cslol-tools archive at runtime is cslol-dll.dll.
+      const dllPath = path.join(toolsPath, 'cslol-dll.dll')
+      await fs.promises.access(dllPath, fs.constants.F_OK)
       return true
     } catch {
       return false
@@ -272,21 +274,12 @@ export class ToolsDownloader {
         )
       }
 
-      // Verify mod-tools.exe exists in source
-      const modToolsPath = path.join(cslolToolsSource, 'mod-tools.exe')
-      const modToolsExists = await fs.promises
-        .access(modToolsPath)
-        .then(() => true)
-        .catch(() => false)
-
-      if (!modToolsExists) {
-        throw this.createError(
-          'validation',
-          'Missing required files',
-          'mod-tools.exe not found in archive',
-          true
-        )
-      }
+      // The patcher itself is bocchi-overlay (shipped with Bocchi); the only
+      // thing we still source from this archive is the tools dir layout and a
+      // working cslol-dll.dll (which the user usually replaces afterwards via
+      // "Browse for DLL", since the bundled one no longer works against current
+      // League builds). mod-tools.exe used to be required here but is dead
+      // weight now, so we don't gate the install on its presence.
 
       // Install to appdata folder
       const targetPath = path.join(app.getPath('userData'), 'cslol-tools')
@@ -310,10 +303,9 @@ export class ToolsDownloader {
         )
       }
 
-      // Final verification
-      const installedModTools = path.join(targetPath, 'mod-tools.exe')
+      // Verify the install dir actually exists post-copy.
       const verifyInstall = await fs.promises
-        .access(installedModTools, fs.constants.F_OK | fs.constants.X_OK)
+        .access(targetPath, fs.constants.F_OK)
         .then(() => true)
         .catch(() => false)
 
@@ -321,7 +313,7 @@ export class ToolsDownloader {
         throw this.createError(
           'validation',
           'Installation verification failed',
-          'mod-tools.exe is not accessible after installation',
+          'cslol-tools directory is not accessible after installation',
           true
         )
       }
@@ -332,9 +324,15 @@ export class ToolsDownloader {
       // Save version info
       await fs.promises.writeFile(this.cslolToolsVersionPath, version)
 
-      // Remove the bundled cslol-dll.dll (it doesn't work, user must provide their own)
-      const bundledDll = path.join(targetPath, 'cslol-dll.dll')
-      await fs.promises.rm(bundledDll, { force: true }).catch(() => {})
+      // Drop mod-tools.exe and the bundled cslol-dll.dll. The patcher uses
+      // bocchi-overlay (we ship our own), and the bundled DLL no longer works
+      // against current League builds — the user replaces it via "Browse for
+      // DLL". Keeping the binaries around just confuses the install dir.
+      await Promise.all(
+        ['mod-tools.exe', 'cslol-dll.dll'].map((name) =>
+          fs.promises.rm(path.join(targetPath, name), { force: true }).catch(() => {})
+        )
+      )
 
       // Clean up temp files
       await fs.promises.rm(tempDir, { recursive: true, force: true })
