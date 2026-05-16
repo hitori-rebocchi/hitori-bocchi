@@ -1,6 +1,8 @@
 import { autoUpdater, CancellationToken } from 'electron-updater'
 import { BrowserWindow } from 'electron'
+import path from 'path'
 import axios from 'axios'
+import { isPackagedApp } from '../utils/isPackagedApp'
 
 export class UpdaterService {
   private mainWindow: BrowserWindow | null = null
@@ -11,6 +13,9 @@ export class UpdaterService {
     autoUpdater.autoDownload = false
     autoUpdater.autoRunAppAfterInstall = true
     autoUpdater.forceDevUpdateConfig = true
+    if (isPackagedApp()) {
+      autoUpdater.updateConfigPath = path.join(process.resourcesPath, 'app-update.yml')
+    }
 
     this.setupEventListeners()
   }
