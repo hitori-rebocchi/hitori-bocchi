@@ -95,8 +95,8 @@ export class UpdaterService {
         return null
       }
 
-      const owner = 'hoangvu12'
-      const repo = 'bocchi'
+      const owner = 'hitori-rebocchi'
+      const repo = 'hitori-bocchi'
       const version = this.updateInfo.version
 
       const url = `https://raw.githubusercontent.com/${owner}/${repo}/v${version}/changes.md`
