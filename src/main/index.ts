@@ -39,6 +39,7 @@ import {
   generateFantomes as generateLocalFantomes,
   type GenerationRequest as LocalFantomeRequest
 } from './services/fantonizeSidecar'
+import { getPetNamesForChampion } from './services/championPets'
 import { listLocalChampions, listSkinsForChampion } from './services/localSkinMetadataService'
 import { hashtableService } from './services/hashtableService'
 import {
@@ -1734,8 +1735,9 @@ function setupIpcHandlers(): void {
         fileLabel: `${request.champion}_${item.fileLabel}`
       }))
       await hashtableService.ensure()
+      const petNames = request.petNames ?? getPetNamesForChampion(request.champion)
       const written = await generateLocalFantomes(
-        { ...request, items: itemsWithBocchiNames, outputDir: modFilesDir },
+        { ...request, items: itemsWithBocchiNames, outputDir: modFilesDir, petNames },
         hashtableService.getFilePath(),
         (progress) => {
           if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1847,7 +1849,8 @@ function setupIpcHandlers(): void {
               }
             ],
             outputDir: modFilesDir,
-            author
+            author,
+            petNames: getPetNamesForChampion(args.championKey)
           },
           hashtableService.getFilePath(),
           (progress) => {

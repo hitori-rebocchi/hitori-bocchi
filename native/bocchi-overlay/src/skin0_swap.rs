@@ -30,6 +30,8 @@ pub struct GenerationRequest {
     pub output_dir: PathBuf,
     pub author: String,
     pub hashtable_path: PathBuf,
+    #[serde(default)]
+    pub pet_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +44,7 @@ pub struct GenerationResult {
     pub error: Option<String>,
 }
 
-fn xxh64_path(p: &str) -> u64 {
+pub(crate) fn xxh64_path(p: &str) -> u64 {
     xxh64(p.to_lowercase().as_bytes(), 0)
 }
 
@@ -161,21 +163,36 @@ fn stream_load_hashtable(path: &Path, needed: &HashSet<u64>) -> Result<HashMap<u
 #[cfg(feature = "private-impl")]
 fn build_fantome(
     prep: &mut PreparedWad,
+    main_wad_path: &Path,
+    hashtable_path: &Path,
     champion: &str,
     src_skin_number: u32,
     info_name: &str,
     info_author: &str,
+    pet_names: &[String],
 ) -> Result<Vec<u8>> {
-    private_impl::build_fantome(prep, champion, src_skin_number, info_name, info_author)
+    private_impl::build_fantome(
+        prep,
+        main_wad_path,
+        hashtable_path,
+        champion,
+        src_skin_number,
+        info_name,
+        info_author,
+        pet_names,
+    )
 }
 
 #[cfg(not(feature = "private-impl"))]
 fn build_fantome(
     _prep: &mut PreparedWad,
+    _main_wad_path: &Path,
+    _hashtable_path: &Path,
     _champion: &str,
     _src_skin_number: u32,
     _info_name: &str,
     _info_author: &str,
+    _pet_names: &[String],
 ) -> Result<Vec<u8>> {
     anyhow::bail!(
         "This build does not include the proprietary fantome-generation \
@@ -195,10 +212,13 @@ pub fn generate_fantomes(request: &GenerationRequest) -> Result<Vec<GenerationRe
     for item in &request.items {
         let r = match build_fantome(
             &mut prep,
+            &request.wad_path,
+            &request.hashtable_path,
             &request.champion,
             item.skin_number,
             &item.display_name,
             &request.author,
+            &request.pet_names,
         ) {
             Ok(bytes) => {
                 let name = format!("{}.fantome", sanitize_filename(&item.file_label));

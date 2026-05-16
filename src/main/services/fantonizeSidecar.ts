@@ -13,6 +13,7 @@ export interface GenerationRequest {
   items: GenerationItem[]
   outputDir: string
   author: string
+  petNames?: string[]
 }
 
 interface RustGenerationResult {
