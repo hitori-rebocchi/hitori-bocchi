@@ -524,7 +524,7 @@ app.on('open-file', (event, filePath) => {
 if (gotTheLock) {
   app.whenReady().then(async () => {
     // Set app user model id for windows
-    electronApp.setAppUserModelId('com.hoangvu12.bocchi')
+    electronApp.setAppUserModelId('com.bocchi.app')
 
     // Initialize migration service
     await skinMigrationService.initialize()

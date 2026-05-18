@@ -69,7 +69,7 @@ export function TitleBar({ appVersion }: TitleBarProps) {
             variant="default"
             size="sm"
             className="h-7 px-3 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white"
-            onClick={() => handleOpenExternal('https://ko-fi.com/hoangvu12')}
+            onClick={() => handleOpenExternal('https://ko-fi.com/rebocchi')}
             aria-label={t('social.donate')}
             title={t('social.donate')}
           >
@@ -99,7 +99,7 @@ export function TitleBar({ appVersion }: TitleBarProps) {
             variant="ghost"
             size="icon"
             className="w-8 h-8 rounded"
-            onClick={() => handleOpenExternal('https://github.com/hoangvu12/bocchi')}
+            onClick={() => handleOpenExternal('https://github.com/hitori-rebocchi/hitori-bocchi')}
             aria-label={t('social.viewGithub')}
             title={t('social.viewGithub')}
           >

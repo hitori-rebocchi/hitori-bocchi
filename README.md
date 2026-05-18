@@ -10,6 +10,8 @@
   [![Discord](https://img.shields.io/discord/1234567890?color=5865F2&logo=discord&logoColor=white)](https://discord.gg/frXDBTe4FW)
 </div>
 
+> 🌱 **Active fork** — This is an actively maintained fork of the original [Bocchi](https://github.com/hoangvu12/bocchi) by [hoangvu12](https://github.com/hoangvu12). After upstream development slowed down, this fork (`hitori-bocchi`) continues the project with new features, bug fixes, and ongoing maintenance to keep Bocchi alive for the community.
+
 ## 📖 Overview
 
 Bocchi is a modern, user-friendly desktop application for changing League of Legends skins. Built with Electron and React.
@@ -49,7 +51,7 @@ Bocchi is a modern, user-friendly desktop application for changing League of Leg
 ```bash
 # Clone the repository
 git clone https://github.com/hitori-rebocchi/hitori-bocchi.git
-cd bocchi
+cd hitori-bocchi
 
 # Install dependencies
 pnpm install
@@ -101,6 +103,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
+- [hoangvu12](https://github.com/hoangvu12) - Original creator of [Bocchi](https://github.com/hoangvu12/bocchi); this fork wouldn't exist without their work
 - [cslol-manager](https://github.com/LeagueToolkit/cslol-manager/) - Core modding tools
 
 ## ⚠️ Disclaimer
@@ -119,12 +122,12 @@ Use at your own risk. Skins are client-side only and do not provide any competit
 
 If you find Bocchi helpful and want to support its development:
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hoangvu12)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/rebocchi)
 
 Your support helps keep the project alive and motivates continued development!
 
 ---
 
 <div align="center">
-  Made with ❤️ by <a href="https://github.com/hoangvu12">hoangvu12</a>
+  Originally made with ❤️ by <a href="https://github.com/hoangvu12">hoangvu12</a> · Fork maintained by <a href="https://github.com/hitori-rebocchi">hitori-rebocchi</a>
 </div>

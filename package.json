@@ -1,10 +1,10 @@
 {
   "name": "bocchi",
-  "version": "1.27.0",
+  "version": "1.27.1",
   "description": "Bocchi - League of Legends Skin Changer",
   "main": "./out/main/index.js",
   "author": "Bocchi Team",
-  "homepage": "https://github.com/bocchi/bocchi",
+  "homepage": "https://github.com/hitori-rebocchi/hitori-bocchi",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
