@@ -4,6 +4,7 @@ import path from 'path'
 import fs from 'fs'
 import crypto from 'crypto'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { isPackagedApp } from './utils/isPackagedApp'
 import icon from '../../build/icon.png?asset'
 import { initMainLogger } from './logger'
 
@@ -242,12 +243,13 @@ function createWindow(): void {
       modToolsWrapper.setToolsTimeout(modToolsTimeout)
     }
 
-    // Check for updates after window is ready
-    // Only in production mode
-    if (!is.dev) {
+    // Check for updates after window is ready (packaged builds only).
+    // `is.dev` relies on `app.isPackaged`, which we can't trust because the
+    // packaged binary is renamed to `electron.exe` — use isPackagedApp() instead.
+    if (isPackagedApp()) {
       setTimeout(() => {
         updaterService.checkForUpdates()
-      }, 3000) // Delay 3 seconds to let the app fully load
+      }, 3000)
     }
   })
 
