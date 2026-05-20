@@ -1,8 +1,1 @@
-- Bocchi is now an actively maintained fork by hitori-rebocchi — support via Ko-fi: https://ko-fi.com/rebocchi
-- Auto-update now checks on launch again (was silently skipping on installed builds)
-- Auto-updater fixed
-- Auto-apply toggle
-- Open downloaded skins folder shortcut
-- LCU-selected champion pinned in list
-- Random skin fallback
-- Faster startup
+- New Discord server: https://discord.gg/vJg3NQfwJD — come say hi!

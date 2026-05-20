@@ -7,7 +7,7 @@
   [![Platform](https://img.shields.io/badge/platform-Windows-brightgreen.svg)](https://github.com/hitori-rebocchi/hitori-bocchi/releases)
   [![Electron](https://img.shields.io/badge/electron-33.x-blue.svg)](https://www.electronjs.org/)
   [![React](https://img.shields.io/badge/react-19.x-61dafb.svg)](https://react.dev/)
-  [![Discord](https://img.shields.io/discord/1234567890?color=5865F2&logo=discord&logoColor=white)](https://discord.gg/frXDBTe4FW)
+  [![Discord](https://img.shields.io/discord/1234567890?color=5865F2&logo=discord&logoColor=white)](https://discord.gg/vJg3NQfwJD)
 </div>
 
 > 🌱 **Active fork** — This is an actively maintained fork of the original [Bocchi](https://github.com/hoangvu12/bocchi) by [hoangvu12](https://github.com/hoangvu12). After upstream development slowed down, this fork (`hitori-bocchi`) continues the project with new features, bug fixes, and ongoing maintenance to keep Bocchi alive for the community.
@@ -115,7 +115,7 @@ Use at your own risk. Skins are client-side only and do not provide any competit
 ## 📧 Contact
 
 - GitHub Issues: [Create an issue](https://github.com/hitori-rebocchi/hitori-bocchi/issues)
-- Discord Server: [Join our community](https://discord.gg/frXDBTe4FW)
+- Discord Server: [Join our community](https://discord.gg/vJg3NQfwJD)
 - GitHub Repository: [Star on GitHub](https://github.com/hitori-rebocchi/hitori-bocchi)
 
 ## 💝 Support

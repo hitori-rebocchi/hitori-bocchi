@@ -83,7 +83,7 @@ export function TitleBar({ appVersion }: TitleBarProps) {
             variant="ghost"
             size="icon"
             className="w-8 h-8 rounded"
-            onClick={() => handleOpenExternal('https://discord.gg/frXDBTe4FW')}
+            onClick={() => handleOpenExternal('https://discord.gg/vJg3NQfwJD')}
             aria-label={t('social.joinDiscord')}
             title={t('social.joinDiscord')}
           >
