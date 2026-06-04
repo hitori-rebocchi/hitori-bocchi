@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useAtom, useAtomValue } from 'jotai'
 import { useTranslation } from 'react-i18next'
 import { selectedSkinsAtom, selectedSkinsDrawerExpandedAtom, p2pRoomAtom } from '../store/atoms'
@@ -23,7 +23,9 @@ import {
   GitMerge,
   Save,
   Brush,
-  Zap
+  Zap,
+  AlertTriangle,
+  ChevronDown
 } from 'lucide-react'
 import { autoApplyEnabledAtom } from '../store/atoms/settings.atoms'
 import SortableList, { SortableItem, SortableKnob } from 'react-easy-sort'
@@ -137,6 +139,18 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set())
 
+  // Runtime injection errors surfaced from the patcher (explicit [ERROR] lines)
+  const [injectionErrors, setInjectionErrors] = useState<string[]>([])
+  const [showInjectionErrors, setShowInjectionErrors] = useState(true)
+  const seenInjectionErrorsRef = useRef<Set<string>>(new Set())
+  const errorToastShownRef = useRef(false)
+
+  const clearInjectionErrors = () => {
+    setInjectionErrors([])
+    seenInjectionErrorsRef.current = new Set()
+    errorToastShownRef.current = false
+  }
+
   // Set phase based on patcher state
   useEffect(() => {
     if (isPatcherRunning && patcherPhase.phase === 'idle') {
@@ -201,7 +215,9 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
       } else if (lowerStatus.includes('cleaning up')) {
         setPatcherPhase({ phase: 'cleaning', detail: status })
       } else if (lowerStatus.includes('done!')) {
-        // When done, switch to running phase
+        // When done, switch to running phase; a successful rebuild also
+        // invalidates errors left over from the previous attempt
+        clearInjectionErrors()
         setPatcherPhase({ phase: 'running', detail: 'Waiting for League match to start' })
       } else if (status === '') {
         setPatcherPhase({ phase: 'idle' })
@@ -237,9 +253,22 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
       console.log('[Patcher]:', message)
     })
 
-    // Listen for patcher errors
+    // Listen for patcher errors and surface them in the drawer's error panel.
+    // Dedupe against every line seen this apply (the DLL loops over repeated
+    // failures), and toast only once — the panel carries the rest.
     const unsubscribeError = window.api.onPatcherError((error: string) => {
       console.error('[Patcher Error]:', error)
+      const cleaned = error
+        .replace('[DLL]', '')
+        .replace(/\[error\]/i, '')
+        .trim()
+      if (!cleaned || seenInjectionErrorsRef.current.has(cleaned)) return
+      seenInjectionErrorsRef.current.add(cleaned)
+      setInjectionErrors((prev) => [...prev, cleaned].slice(-20))
+      if (!errorToastShownRef.current) {
+        errorToastShownRef.current = true
+        toast.error(t('injectionErrors.toast'), { description: cleaned })
+      }
     })
 
     return () => {
@@ -248,7 +277,7 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
       unsubscribeMessage()
       unsubscribeError()
     }
-  }, [])
+  }, [t])
 
   // Load custom images for selected custom skins
   useEffect(() => {
@@ -288,6 +317,9 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
 
   const handleApplySkins = async () => {
     // Don't set phase here - let the status updates handle it
+
+    // Clear stale injection errors from a previous attempt
+    clearInjectionErrors()
 
     // Always use the parent's apply function which handles loading states
     // The parent (App.tsx) will check if it should use smart apply or regular apply
@@ -952,6 +984,46 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
       {/* Expanded View */}
       {isExpanded && (
         <div className="animate-slide-up">
+          {/* Injection errors panel */}
+          {injectionErrors.length > 0 && (
+            <div className="border-b border-border bg-state-error/5">
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowInjectionErrors((v) => !v)}
+                  className="flex items-center gap-2 text-sm font-medium text-state-error"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  {t('injectionErrors.title', { count: injectionErrors.length })}
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      showInjectionErrors ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={clearInjectionErrors}
+                  className="text-xs text-text-muted hover:text-text-secondary"
+                >
+                  {t('injectionErrors.clear')}
+                </button>
+              </div>
+              {showInjectionErrors && (
+                <ul className="px-4 pb-3 space-y-1 max-h-32 overflow-y-auto">
+                  {injectionErrors.map((err, i) => (
+                    <li
+                      key={i}
+                      className="text-xs font-mono text-state-error/90 break-all leading-relaxed"
+                    >
+                      • {err}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           {/* Tabs */}
           {p2pRoom && (
             <div className="flex border-b border-border">

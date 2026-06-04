@@ -657,5 +657,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "注入できません",
+    "description": "注入コンポーネント（DLL）が古くなっています。",
+    "waitForUpdate": "ゲームのアップデートにより注入DLLが古くなったため、スキンは適用されません。提供元からDLLの更新が出るまでお待ちください—これがスキンが適用されない原因です。",
+    "gameBuild": "ゲームビルド：",
+    "acknowledge": "了解"
+  },
+  "injectionErrors": {
+    "title_one": "注入エラー ({{count}})",
+    "title_other": "注入エラー ({{count}})",
+    "clear": "クリア",
+    "toast": "注入エラー"
   }
 }

@@ -56,3 +56,7 @@ export const cslolToolsUpdateInfoAtom = atom<{
   currentVersion: string | null
   latestVersion: string | null
 } | null>(null)
+
+// DLL end-of-life (outdated injection component) dialog atoms
+export const showDllEolDialogAtom = atom<boolean>(false)
+export const dllEolInfoAtom = atom<{ build: string | null } | null>(null)

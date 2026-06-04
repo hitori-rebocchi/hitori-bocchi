@@ -667,5 +667,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Không thể chèn skin",
+    "description": "Thành phần chèn skin (DLL) đã lỗi thời.",
+    "waitForUpdate": "DLL chèn skin đã lỗi thời sau bản vá mới của game, nên skin sẽ KHÔNG được chèn. Vui lòng chờ nhà cung cấp cập nhật DLL — đó là lý do skin của bạn không được áp dụng.",
+    "gameBuild": "Phiên bản game:",
+    "acknowledge": "Đã hiểu"
+  },
+  "injectionErrors": {
+    "title_one": "Lỗi chèn skin ({{count}})",
+    "title_other": "Lỗi chèn skin ({{count}})",
+    "clear": "Xóa",
+    "toast": "Lỗi chèn skin"
   }
 }

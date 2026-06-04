@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Wstrzykiwanie niedostępne",
+    "description": "Komponent wstrzykiwania (DLL) jest nieaktualny.",
+    "waitForUpdate": "DLL wstrzykiwania jest nieaktualny po niedawnej aktualizacji gry, dlatego skiny nie zostaną wstrzyknięte. Poczekaj na aktualizację DLL od dostawcy — to dlatego twoje skiny nie są stosowane.",
+    "gameBuild": "Wersja gry:",
+    "acknowledge": "Rozumiem"
+  },
+  "injectionErrors": {
+    "title_one": "Błąd wstrzykiwania ({{count}})",
+    "title_other": "Błędy wstrzykiwania ({{count}})",
+    "clear": "Wyczyść",
+    "toast": "Błąd wstrzykiwania"
   }
 }

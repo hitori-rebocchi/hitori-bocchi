@@ -657,5 +657,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "주입 불가",
+    "description": "주입 구성 요소(DLL)가 오래되었습니다.",
+    "waitForUpdate": "최근 게임 패치로 주입 DLL이 오래되어 스킨이 주입되지 않습니다. 공급자의 DLL 업데이트를 기다려 주세요 — 이것이 스킨이 적용되지 않는 이유입니다.",
+    "gameBuild": "게임 빌드:",
+    "acknowledge": "확인"
+  },
+  "injectionErrors": {
+    "title_one": "주입 오류 ({{count}})",
+    "title_other": "주입 오류 ({{count}})",
+    "clear": "지우기",
+    "toast": "주입 오류"
   }
 }

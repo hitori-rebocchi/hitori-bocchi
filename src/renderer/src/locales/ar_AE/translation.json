@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "الحقن غير متاح",
+    "description": "مكوّن الحقن (DLL) قديم.",
+    "waitForUpdate": "أصبح ملف الحقن (DLL) قديمًا بعد تحديث اللعبة الأخير، لذا لن يتم حقن السكنات. الرجاء انتظار تحديث لـ DLL من المزوّد — هذا هو السبب في عدم تطبيق السكنات.",
+    "gameBuild": "إصدار اللعبة:",
+    "acknowledge": "حسنًا"
+  },
+  "injectionErrors": {
+    "title_one": "خطأ في الحقن ({{count}})",
+    "title_other": "أخطاء في الحقن ({{count}})",
+    "clear": "مسح",
+    "toast": "خطأ في الحقن"
   }
 }

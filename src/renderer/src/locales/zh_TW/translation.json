@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "無法注入",
+    "description": "注入元件（DLL）已過期。",
+    "waitForUpdate": "遊戲近期更新後注入 DLL 已過期，因此戰際不會被注入。請等待提供方更新 DLL — 這就是戰際未生效的原因。",
+    "gameBuild": "遊戲版本：",
+    "acknowledge": "知道了"
+  },
+  "injectionErrors": {
+    "title_one": "注入錯誤 ({{count}})",
+    "title_other": "注入錯誤 ({{count}})",
+    "clear": "清除",
+    "toast": "注入錯誤"
   }
 }

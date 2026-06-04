@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Η εισαγωγή δεν είναι διαθέσιμη",
+    "description": "Το στοιχείο εισαγωγής (DLL) είναι παρωχημένο.",
+    "waitForUpdate": "Το DLL εισαγωγής έχει παλιώσει μετά από πρόσφατη ενημέρωση του παιχνιδιού, οπότε τα skins δεν θα εισαχθούν. Περιμένετε ενημέρωση του DLL από τον πάροχο — γι' αυτό δεν εφαρμόζονται τα skins σας.",
+    "gameBuild": "Έκδοση παιχνιδιού:",
+    "acknowledge": "Κατάλαβα"
+  },
+  "injectionErrors": {
+    "title_one": "Σφάλμα εισαγωγής ({{count}})",
+    "title_other": "Σφάλματα εισαγωγής ({{count}})",
+    "clear": "Εκκαθάριση",
+    "toast": "Σφάλμα εισαγωγής"
   }
 }

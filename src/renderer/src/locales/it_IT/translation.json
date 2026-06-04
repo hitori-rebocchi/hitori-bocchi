@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Iniezione non disponibile",
+    "description": "Il componente di iniezione (DLL) è obsoleto.",
+    "waitForUpdate": "La DLL di iniezione è obsoleta dopo una recente patch del gioco, quindi le skin non verranno iniettate. Attendi un aggiornamento della DLL da parte del fornitore — è questo il motivo per cui le tue skin non vengono applicate.",
+    "gameBuild": "Build del gioco:",
+    "acknowledge": "Ho capito"
+  },
+  "injectionErrors": {
+    "title_one": "Errore di iniezione ({{count}})",
+    "title_other": "Errori di iniezione ({{count}})",
+    "clear": "Cancella",
+    "toast": "Errore di iniezione"
   }
 }

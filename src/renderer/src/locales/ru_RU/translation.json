@@ -657,5 +657,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Внедрение недоступно",
+    "description": "Компонент внедрения (DLL) устарел.",
+    "waitForUpdate": "DLL для внедрения устарел после недавнего обновления игры, поэтому скины не внедряются. Пожалуйста, дождитесь обновления DLL от поставщика — именно поэтому скины не применяются.",
+    "gameBuild": "Сборка игры:",
+    "acknowledge": "Понятно"
+  },
+  "injectionErrors": {
+    "title_one": "Ошибка внедрения ({{count}})",
+    "title_other": "Ошибки внедрения ({{count}})",
+    "clear": "Очистить",
+    "toast": "Ошибка внедрения"
   }
 }

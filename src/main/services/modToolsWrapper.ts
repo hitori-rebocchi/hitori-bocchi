@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process'
 import path from 'path'
 import fs from 'fs/promises'
+import { createWriteStream, WriteStream } from 'fs'
 import { app, BrowserWindow } from 'electron'
 import { settingsService } from './settingsService'
 import { getSidecarPath } from '../utils/sidecarPath'
@@ -16,6 +17,10 @@ export class ModToolsWrapper {
   private currentOperation: ChildProcess | null = null
   private applyInProgress: boolean = false
   private importedMods: string[] = [] // Track successfully imported mods for cleanup
+  private stopRequested: boolean = false // Suppresses exit-code errors on intentional kills
+  private eolNotified: boolean = false // The DLL repeats its EOL line; notify the UI once per run
+  private recentStderr: string[] = [] // Tail of patcher stderr for exit diagnostics
+  private patcherLog: WriteStream | null = null // Persistent per-apply log (survives crashes/BSOD)
 
   constructor() {
     const userData = app.getPath('userData')
@@ -118,32 +123,37 @@ export class ModToolsWrapper {
         const output = data.toString()
         stdout += output
 
-        // Send progress to renderer if requested
-        if (sendProgress && this.mainWindow && !this.mainWindow.isDestroyed()) {
-          const lines = output.split('\n').filter((line) => line.trim())
-          lines.forEach((line) => {
-            const trimmedLine = line.trim()
+        const lines = output.split('\n').filter((line) => line.trim())
+        lines.forEach((line) => {
+          const trimmedLine = line.trim()
+          this.logToFile(trimmedLine)
+          // Send progress to renderer if requested
+          if (sendProgress && this.mainWindow && !this.mainWindow.isDestroyed()) {
             console.log(`[MOD-TOOLS]: ${trimmedLine}`)
             this.mainWindow!.webContents.send('patcher-status', trimmedLine)
-          })
-        }
+          }
+        })
       })
 
       process.stderr.on('data', (data) => {
         const output = data.toString()
         stderr += output
 
-        // Also send stderr to renderer if it contains status info
-        if (sendProgress && this.mainWindow && !this.mainWindow.isDestroyed()) {
-          const lines = output.split('\n').filter((line) => line.trim())
-          lines.forEach((line) => {
-            const trimmedLine = line.trim()
-            if (trimmedLine.includes('[INFO]') || trimmedLine.includes('[WARN]')) {
-              console.log(`[MOD-TOOLS]: ${trimmedLine}`)
-              this.mainWindow!.webContents.send('patcher-status', trimmedLine)
-            }
-          })
-        }
+        const lines = output.split('\n').filter((line) => line.trim())
+        lines.forEach((line) => {
+          const trimmedLine = line.trim()
+          this.logToFile(`[stderr] ${trimmedLine}`)
+          // Also send stderr to renderer if it contains status info
+          if (
+            sendProgress &&
+            this.mainWindow &&
+            !this.mainWindow.isDestroyed() &&
+            (trimmedLine.includes('[INFO]') || trimmedLine.includes('[WARN]'))
+          ) {
+            console.log(`[MOD-TOOLS]: ${trimmedLine}`)
+            this.mainWindow!.webContents.send('patcher-status', trimmedLine)
+          }
+        })
       })
 
       process.on('close', (code) => {
@@ -157,7 +167,14 @@ export class ModToolsWrapper {
         } else if (code === 0) {
           resolve(stdout)
         } else {
-          reject(new Error(`Process exited with code ${code}: ${stderr}`))
+          // Full stderr can be hundreds of lines; the tail has the actual error.
+          const tail = stderr
+            .split('\n')
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .slice(-5)
+            .join('\n')
+          reject(new Error(`Process exited with code ${code}: ${tail}`))
         }
       })
 
@@ -175,9 +192,13 @@ export class ModToolsWrapper {
     this.isCancelled = false
     this.applyInProgress = true
     this.importedMods = []
+    this.eolNotified = false
+    this.recentStderr = []
 
     try {
       await this.stopOverlay()
+      await this.openPatcherLog()
+      this.logToFile(`[APPLY] start: ${(preset.selectedSkins || []).length} skin(s)`)
 
       console.debug('[ModToolsWrapper] Preparing directories')
       await fs.rm(this.profilesPath, { recursive: true, force: true }).catch(() => {})
@@ -275,6 +296,10 @@ export class ModToolsWrapper {
       }
 
       console.info('[ModToolsWrapper] Starting patcher via ltk-manager sidecar')
+      this.logToFile('[APPLY] overlay built, starting patcher')
+      // Reset here (not at apply start) so the exit event of the previous
+      // patcher — killed by stopOverlay above — is still treated as intentional.
+      this.stopRequested = false
       this.runningProcess = spawn(
         sidecarBin,
         [
@@ -297,14 +322,13 @@ export class ModToolsWrapper {
         lines.forEach((line) => {
           const trimmedLine = line.trim()
           console.log(`[MOD-TOOLS]: ${trimmedLine}`)
+          this.logToFile(trimmedLine)
 
-          // Only send to renderer if it's not a DLL log
-          if (
-            this.mainWindow &&
-            !this.mainWindow.isDestroyed() &&
-            !trimmedLine.startsWith('[DLL]')
-          ) {
-            this.mainWindow.webContents.send('patcher-status', trimmedLine)
+          // Surface fatal/injection diagnostics (incl. the otherwise-filtered
+          // [DLL] lines) before dropping the rest of the [DLL] firehose.
+          const isDiagnostic = this.emitPatcherDiagnostics(trimmedLine)
+          if (!isDiagnostic && !trimmedLine.startsWith('[DLL]')) {
+            this.sendToRenderer('patcher-status', trimmedLine)
           }
         })
       })
@@ -316,31 +340,43 @@ export class ModToolsWrapper {
         lines.forEach((line) => {
           const trimmedLine = line.trim()
           console.error(`[MOD-TOOLS ERROR]: ${trimmedLine}`)
+          this.logToFile(`[stderr] ${trimmedLine}`)
+          this.recentStderr = [...this.recentStderr.slice(-9), trimmedLine]
 
-          // Only send to renderer if it's not a DLL log
-          if (
-            this.mainWindow &&
-            !this.mainWindow.isDestroyed() &&
-            !trimmedLine.startsWith('[DLL]')
-          ) {
-            this.mainWindow.webContents.send('patcher-error', trimmedLine)
+          // Only explicit [ERROR] lines (handled above) reach the error panel;
+          // everything else is progress noise, forwarded as status.
+          const isDiagnostic = this.emitPatcherDiagnostics(trimmedLine)
+          if (!isDiagnostic && !trimmedLine.startsWith('[DLL]')) {
+            this.sendToRenderer('patcher-status', trimmedLine)
           }
         })
       })
 
       this.runningProcess.on('exit', (code) => {
         console.log(`Mod tools process exited with code ${code}`)
+        this.logToFile(`[APPLY] patcher exited with code ${code}`)
+        this.closePatcherLog()
         this.cleanupProcess(this.runningProcess)
         this.runningProcess = null
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('patcher-status', '')
+
+        // An exit nobody asked for means injection died (crash, Vanguard kill,
+        // sidecar panic) — surface it instead of silently going idle.
+        if (!this.stopRequested && code !== 0) {
+          const tail = this.recentStderr.slice(-3).join(' | ')
+          this.sendToRenderer(
+            'patcher-error',
+            `Patcher exited unexpectedly (code ${code ?? 'killed'})${tail ? `: ${tail}` : ''}`
+          )
         }
+        this.sendToRenderer('patcher-status', '')
       })
 
       this.applyInProgress = false
       return { success: true, message: 'Preset applied successfully' }
     } catch (error) {
       console.error('Failed to apply preset:', error)
+      this.logToFile(`[APPLY] failed: ${error instanceof Error ? error.message : error}`)
+      this.closePatcherLog()
       this.applyInProgress = false
 
       // Send cancellation status to renderer if cancelled
@@ -352,6 +388,65 @@ export class ModToolsWrapper {
     }
   }
 
+  private sendToRenderer(channel: string, payload: unknown): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(channel, payload)
+    }
+  }
+
+  // Per-apply log written to disk so there's a trace even if the machine
+  // crashes mid-injection (e.g. the BSOD-on-apply reports).
+  private async openPatcherLog(): Promise<void> {
+    try {
+      const logDir = path.join(app.getPath('userData'), 'logs')
+      await fs.mkdir(logDir, { recursive: true })
+      this.patcherLog?.end()
+      this.patcherLog = createWriteStream(path.join(logDir, 'patcher-last.log'), { flags: 'w' })
+    } catch {
+      this.patcherLog = null
+    }
+  }
+
+  private logToFile(line: string): void {
+    this.patcherLog?.write(`${new Date().toISOString()} ${line}\n`)
+  }
+
+  private closePatcherLog(): void {
+    this.patcherLog?.end()
+    this.patcherLog = null
+  }
+
+  // Inspect a runtime patcher log line for conditions the user needs to see.
+  // Returns true when the line was an EOL/error so callers skip emitting it as
+  // a normal status update.
+  private emitPatcherDiagnostics(line: string): boolean {
+    // EOL kill-switch: the DLL refuses to inject once the game build passes the
+    // baked-in end-of-life marker. Route to a dedicated event so the UI can
+    // explain that an updated DLL is required and skins won't inject until then.
+    // The DLL repeats the line on every injection attempt — notify once per run
+    // so the dialog doesn't reopen after the user dismissed it.
+    if (line.includes('EOL_TIMESTAMP') || line.includes('End of life reached')) {
+      if (!this.eolNotified) {
+        this.eolNotified = true
+        const match = line.match(/please update:\s*([0-9A-Fa-f]+)/)
+        this.sendToRenderer('patcher-dll-eol', { build: match ? match[1] : null, raw: line })
+      }
+      return true
+    }
+    // Rust panics from the sidecar carry no [ERROR] tag but are always fatal.
+    if (/panicked at|thread '[^']*' panicked|fatal runtime error/.test(line)) {
+      this.sendToRenderer('patcher-error', line)
+      return true
+    }
+    // Only lines with an explicit [ERROR] tag are real failures — the patcher
+    // firehose mentions "error" in plenty of progress lines (e.g. "0 errors").
+    if (/\[error\]/i.test(line) || /\[err\]/i.test(line)) {
+      this.sendToRenderer('patcher-error', line)
+      return true
+    }
+    return false
+  }
+
   private cleanupProcess(process: ChildProcess | null) {
     if (!process) return
     const index = this.activeProcesses.indexOf(process)
@@ -361,6 +456,7 @@ export class ModToolsWrapper {
   }
 
   async stopOverlay(): Promise<void> {
+    this.stopRequested = true
     if (this.runningProcess) {
       this.runningProcess.stdin?.write('\n')
       await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -472,6 +568,7 @@ export class ModToolsWrapper {
 
     console.info('[ModToolsWrapper] Cancelling apply operation...')
     this.isCancelled = true
+    this.stopRequested = true
 
     // Kill current operation if running
     if (this.currentOperation) {

@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Injection indisponible",
+    "description": "Le composant d'injection (DLL) est obsolète.",
+    "waitForUpdate": "La DLL d'injection est obsolète après une récente mise à jour du jeu, les skins ne seront donc pas injectés. Veuillez attendre une mise à jour de la DLL par le fournisseur — c'est la raison pour laquelle vos skins ne sont pas appliqués.",
+    "gameBuild": "Build du jeu :",
+    "acknowledge": "Compris"
+  },
+  "injectionErrors": {
+    "title_one": "Erreur d'injection ({{count}})",
+    "title_other": "Erreurs d'injection ({{count}})",
+    "clear": "Effacer",
+    "toast": "Erreur d'injection"
   }
 }

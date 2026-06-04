@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "ไม่สามารถฉีดได้",
+    "description": "ส่วนฉีด (DLL) ล้าสมัย",
+    "waitForUpdate": "DLL สำหรับฉีดล้าสมัยหลังจากแพตช์ล่าสุดของเกม สกินจึงจะไม่ถูกฉีด โปรดรอการอัปเดต DLL จากผู้ให้บริการ — นี่คือสาเหตุที่สกินของคุณไม่ถูกใช้งาน",
+    "gameBuild": "เวอร์ชันเกม:",
+    "acknowledge": "รับทราบ"
+  },
+  "injectionErrors": {
+    "title_one": "ข้อผิดพลาดการฉีด ({{count}})",
+    "title_other": "ข้อผิดพลาดการฉีด ({{count}})",
+    "clear": "ล้าง",
+    "toast": "ข้อผิดพลาดการฉีด"
   }
 }

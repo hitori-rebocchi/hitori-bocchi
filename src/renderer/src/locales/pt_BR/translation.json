@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Injeção indisponível",
+    "description": "O componente de injeção (DLL) está desatualizado.",
+    "waitForUpdate": "A DLL de injeção ficou desatualizada após um patch recente do jogo, por isso as skins não serão injetadas. Aguarde uma atualização da DLL pelo provedor — é por isso que suas skins não estão sendo aplicadas.",
+    "gameBuild": "Build do jogo:",
+    "acknowledge": "Entendi"
+  },
+  "injectionErrors": {
+    "title_one": "Erro de injeção ({{count}})",
+    "title_other": "Erros de injeção ({{count}})",
+    "clear": "Limpar",
+    "toast": "Erro de injeção"
   }
 }

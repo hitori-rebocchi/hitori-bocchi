@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Injectarea indisponibilă",
+    "description": "Componenta de injectare (DLL) este învechită.",
+    "waitForUpdate": "DLL-ul de injectare s-a învechit după un patch recent al jocului, așa că skinurile nu vor fi injectate. Te rugăm să aștepți o actualizare a DLL-ului de la furnizor — acesta este motivul pentru care skinurile tale nu se aplică.",
+    "gameBuild": "Build-ul jocului:",
+    "acknowledge": "Am înțeles"
+  },
+  "injectionErrors": {
+    "title_one": "Eroare de injectare ({{count}})",
+    "title_other": "Erori de injectare ({{count}})",
+    "clear": "Șterge",
+    "toast": "Eroare de injectare"
   }
 }

@@ -324,6 +324,13 @@ const api = {
     ipcRenderer.on('patcher-error', handler)
     return () => ipcRenderer.removeListener('patcher-error', handler)
   },
+  onPatcherDllEol: (callback: (info: { build: string | null; raw: string }) => void) => {
+    const handler = (_: IpcRendererEvent, info: { build: string | null; raw: string }) => {
+      callback(info)
+    }
+    ipcRenderer.on('patcher-dll-eol', handler)
+    return () => ipcRenderer.removeListener('patcher-dll-eol', handler)
+  },
   onImportProgress: (callback: (data: ImportProgress) => void) => {
     const handler = (_: IpcRendererEvent, data: ImportProgress) => {
       callback(data)

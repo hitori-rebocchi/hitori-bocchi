@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Az injektálás nem elérhető",
+    "description": "Az injektáló komponens (DLL) elavult.",
+    "waitForUpdate": "Az injektáló DLL egy friss játékfrissítés után elavult, ezért a skinek nem kerülnek injektálásra. Kérjük, várj a DLL frissítésére a szolgáltatótól — ezért nem érvényesülnek a skinjeid.",
+    "gameBuild": "Játék build:",
+    "acknowledge": "Értem"
+  },
+  "injectionErrors": {
+    "title_one": "Injektálási hiba ({{count}})",
+    "title_other": "Injektálási hibák ({{count}})",
+    "clear": "Törlés",
+    "toast": "Injektálási hiba"
   }
 }

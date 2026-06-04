@@ -657,5 +657,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "无法注入",
+    "description": "注入组件（DLL）已过期。",
+    "waitForUpdate": "游戏近期更新后注入 DLL 已过期，因此皮肤不会被注入。请等待提供方更新 DLL — 这就是皮肤未生效的原因。",
+    "gameBuild": "游戏版本：",
+    "acknowledge": "知道了"
+  },
+  "injectionErrors": {
+    "title_one": "注入错误 ({{count}})",
+    "title_other": "注入错误 ({{count}})",
+    "clear": "清除",
+    "toast": "注入错误"
   }
 }

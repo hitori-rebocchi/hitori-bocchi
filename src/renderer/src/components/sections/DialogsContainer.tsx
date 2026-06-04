@@ -1,7 +1,8 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useAtom, useSetAtom } from 'jotai'
 import { UpdateDialog } from '../UpdateDialog'
 import { CslolToolsUpdateDialog } from '../CslolToolsUpdateDialog'
+import { DllOutdatedDialog } from '../DllOutdatedDialog'
 import { ChampionDataUpdateDialog } from '../ChampionDataUpdateDialog'
 import { EditCustomSkinDialog } from '../EditCustomSkinDialog'
 import { DownloadedSkinsDialog } from '../DownloadedSkinsDialog'
@@ -12,6 +13,8 @@ import {
   showUpdateDialogAtom,
   showCslolToolsUpdateDialogAtom,
   cslolToolsUpdateInfoAtom,
+  showDllEolDialogAtom,
+  dllEolInfoAtom,
   statusMessageAtom
 } from '../../store/atoms/game.atoms'
 import { showChampionDataUpdateAtom } from '../../store/atoms/champion.atoms'
@@ -44,9 +47,22 @@ export function DialogsContainer() {
     showDownloadedSkinsDialogAtom
   )
   const [showSettingsDialog, setShowSettingsDialog] = useAtom(showSettingsDialogAtom)
+  const [showDllEolDialog, setShowDllEolDialog] = useAtom(showDllEolDialogAtom)
+  const [dllEolInfo, setDllEolInfo] = useAtom(dllEolInfoAtom)
   const [, setLeagueClientEnabled] = useAtom(leagueClientEnabledAtom)
   const [, setChampionDetectionEnabled] = useAtom(championDetectionEnabledAtom)
   const setStatusMessage = useSetAtom(statusMessageAtom)
+
+  // The DLL's end-of-life kill-switch fires at runtime, after the patcher has
+  // already reported success — surface it as a blocking modal so the user
+  // understands skins won't inject until the DLL provider ships an update.
+  useEffect(() => {
+    const unsubscribe = window.api.onPatcherDllEol((info) => {
+      setDllEolInfo({ build: info.build })
+      setShowDllEolDialog(true)
+    })
+    return () => unsubscribe()
+  }, [setDllEolInfo, setShowDllEolDialog])
 
   const handleEditCustomSkinSave = useCallback(
     async (newName: string, newChampion?: string, newImagePath?: string) => {
@@ -138,6 +154,12 @@ export function DialogsContainer() {
       />
 
       <PresetsDialog />
+
+      <DllOutdatedDialog
+        isOpen={showDllEolDialog}
+        onClose={() => setShowDllEolDialog(false)}
+        build={dllEolInfo?.build ?? null}
+      />
     </>
   )
 }

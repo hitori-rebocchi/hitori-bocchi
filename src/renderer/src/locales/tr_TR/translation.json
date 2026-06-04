@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Enjeksiyon kullanılamıyor",
+    "description": "Enjeksiyon bileşeni (DLL) güncel değil.",
+    "waitForUpdate": "Enjeksiyon DLL'i son oyun yamasından sonra güncelliğini yitirdi, bu yüzden skinler enjekte edilmeyecek. Lütfen sağlayıcıdan DLL güncellemesini bekleyin — skinlerinizin uygulanmama nedeni budur.",
+    "gameBuild": "Oyun sürümü:",
+    "acknowledge": "Anladım"
+  },
+  "injectionErrors": {
+    "title_one": "Enjeksiyon hatası ({{count}})",
+    "title_other": "Enjeksiyon hataları ({{count}})",
+    "clear": "Temizle",
+    "toast": "Enjeksiyon hatası"
   }
 }

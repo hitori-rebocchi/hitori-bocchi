@@ -713,5 +713,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Inyección no disponible",
+    "description": "El componente de inyección (DLL) está desactualizado.",
+    "waitForUpdate": "El DLL de inyección quedó desactualizado tras un parche reciente del juego, por eso las skins no se inyectan. Espera una actualización del DLL por parte del proveedor; ese es el motivo por el que tus skins no se aplican.",
+    "gameBuild": "Build del juego:",
+    "acknowledge": "Entendido"
+  },
+  "injectionErrors": {
+    "title_one": "Error de inyección ({{count}})",
+    "title_other": "Errores de inyección ({{count}})",
+    "clear": "Limpiar",
+    "toast": "Error de inyección"
   }
 }

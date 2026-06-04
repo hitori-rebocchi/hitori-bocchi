@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Injeksi tidak tersedia",
+    "description": "Komponen injeksi (DLL) sudah usang.",
+    "waitForUpdate": "DLL injeksi sudah usang setelah patch game terbaru, sehingga skin tidak akan diinjeksi. Harap tunggu pembaruan DLL dari penyedia — inilah alasan skin Anda tidak diterapkan.",
+    "gameBuild": "Build game:",
+    "acknowledge": "Mengerti"
+  },
+  "injectionErrors": {
+    "title_one": "Kesalahan injeksi ({{count}})",
+    "title_other": "Kesalahan injeksi ({{count}})",
+    "clear": "Hapus",
+    "toast": "Kesalahan injeksi"
   }
 }

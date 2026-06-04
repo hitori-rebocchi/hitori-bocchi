@@ -654,5 +654,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Injection unavailable",
+    "description": "The injection component (DLL) is out of date.",
+    "waitForUpdate": "The injection DLL is outdated after a recent game patch, so skins won't be injected. Please wait for an updated DLL from the provider — that's why your skins aren't being applied.",
+    "gameBuild": "Game build:",
+    "acknowledge": "Got it"
+  },
+  "injectionErrors": {
+    "title_one": "Injection error ({{count}})",
+    "title_other": "Injection errors ({{count}})",
+    "clear": "Clear",
+    "toast": "Injection error"
   }
 }

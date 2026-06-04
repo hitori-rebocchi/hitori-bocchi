@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Vkládání není dostupné",
+    "description": "Komponenta pro vkládání (DLL) je zastaralá.",
+    "waitForUpdate": "DLL pro vkládání je po nedávné aktualizaci hry zastaralá, proto se skiny nevloží. Počkejte prosím na aktualizaci DLL od poskytovatele — to je důvod, proč se vaše skiny neaplikují.",
+    "gameBuild": "Build hry:",
+    "acknowledge": "Rozumím"
+  },
+  "injectionErrors": {
+    "title_one": "Chyba vkládání ({{count}})",
+    "title_other": "Chyby vkládání ({{count}})",
+    "clear": "Vymazat",
+    "toast": "Chyba vkládání"
   }
 }

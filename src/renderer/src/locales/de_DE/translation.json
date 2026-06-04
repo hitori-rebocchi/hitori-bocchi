@@ -652,5 +652,18 @@
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed"
     }
+  },
+  "dllEol": {
+    "title": "Injektion nicht verfügbar",
+    "description": "Die Injektionskomponente (DLL) ist veraltet.",
+    "waitForUpdate": "Die Injektions-DLL ist nach einem kürzlichen Spiel-Patch veraltet, daher werden keine Skins injiziert. Bitte warte auf ein DLL-Update des Anbieters — das ist der Grund, warum deine Skins nicht angewendet werden.",
+    "gameBuild": "Spiel-Build:",
+    "acknowledge": "Verstanden"
+  },
+  "injectionErrors": {
+    "title_one": "Injektionsfehler ({{count}})",
+    "title_other": "Injektionsfehler ({{count}})",
+    "clear": "Löschen",
+    "toast": "Injektionsfehler"
   }
 }
