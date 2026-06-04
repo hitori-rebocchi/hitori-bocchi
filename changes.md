@@ -1,1 +1,3 @@
-- New Discord server: https://discord.gg/vJg3NQfwJD — come say hi!
+- Apply failures are now surfaced in the app instead of failing silently — if injection dies (crash, anti-cheat kill, or sidecar error) you'll see a clear message with details.
+- Added a dedicated warning when the injection DLL is out of date and needs updating, so it's obvious why skins stop applying after a game patch.
+- Each Apply now writes a log to disk for easier troubleshooting if something goes wrong.
