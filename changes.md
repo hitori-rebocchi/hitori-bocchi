@@ -1,3 +1,4 @@
-- Apply failures are now surfaced in the app instead of failing silently — if injection dies (crash, anti-cheat kill, or sidecar error) you'll see a clear message with details.
-- Added a dedicated warning when the injection DLL is out of date and needs updating, so it's obvious why skins stop applying after a game patch.
-- Each Apply now writes a log to disk for easier troubleshooting if something goes wrong.
+- Fixed first-time skin generation sometimes failing with a "521 / aborted" error: the CommunityDragon hashtable download now retries automatically and falls back to a GitHub mirror if the main source is unreachable.
+- Generation no longer breaks when the daily hashtable refresh fails — it now keeps using your cached copy instead of aborting.
+- Added a manual fallback: if the hashtable can't be downloaded at all, you can download it yourself and import it from the Generate dialog.
+- Clearer message when the hashtable source is temporarily blocked, making it obvious it's a CommunityDragon/network issue rather than the app.

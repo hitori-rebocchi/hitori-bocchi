@@ -42,7 +42,7 @@ import {
 } from './services/fantonizeSidecar'
 import { getPetNamesForChampion } from './services/championPets'
 import { listLocalChampions, listSkinsForChampion } from './services/localSkinMetadataService'
-import { hashtableService } from './services/hashtableService'
+import { hashtableService, HashtableUnavailableError } from './services/hashtableService'
 import {
   translationService,
   supportedLanguages,
@@ -1728,6 +1728,25 @@ function setupIpcHandlers(): void {
     }
   })
 
+  // Curated response when the hashtable can't be fetched from any source — makes
+  // clear it's a server-side block (CommunityDragon/Cloudflare), not a bocchi bug,
+  // and signals the UI (via `code`) to offer the manual-import fallback.
+  const hashtableErrorResponse = (
+    error: unknown
+  ): { success: false; code: string; error: string } | null => {
+    if (error instanceof HashtableUnavailableError) {
+      return {
+        success: false,
+        code: 'HASHTABLE_UNAVAILABLE',
+        error:
+          'Could not download the CommunityDragon hashtable. This is a temporary block on ' +
+          "CommunityDragon's servers (Cloudflare), not a bug in bocchi. Retry in a minute, or " +
+          'open the Generate dialog to download/import the hashtable file manually.'
+      }
+    }
+    return null
+  }
+
   ipcMain.handle('local-fantome:generate', async (_, request: LocalFantomeRequest) => {
     try {
       const modFilesDir = path.join(app.getPath('userData'), 'mod-files')
@@ -1749,10 +1768,12 @@ function setupIpcHandlers(): void {
       )
       return { success: true, written }
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
+      return (
+        hashtableErrorResponse(error) ?? {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      )
     }
   })
 
@@ -1866,10 +1887,12 @@ function setupIpcHandlers(): void {
         }
         return { success: true, localPath: written[0] }
       } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        }
+        return (
+          hashtableErrorResponse(error) ?? {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        )
       }
     }
   )
@@ -1887,6 +1910,36 @@ function setupIpcHandlers(): void {
         }
       })
       return { success: true, path }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  // Manual fallback: the URL users can open to grab the hashtable themselves
+  // when both download sources are blocked on their network.
+  ipcMain.handle('local-fantome:hashtable-source-url', () => {
+    return { success: true, url: hashtableService.getManualSourceUrl() }
+  })
+
+  // Manual fallback: let the user pick a hashtable file from disk and install it.
+  ipcMain.handle('local-fantome:hashtable-import', async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Select hashes.game.txt',
+        properties: ['openFile'],
+        filters: [
+          { name: 'Hashtable', extensions: ['txt'] },
+          { name: 'All files', extensions: ['*'] }
+        ]
+      })
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true }
+      }
+      const imported = await hashtableService.importFromFile(result.filePaths[0])
+      return { success: true, path: imported.path, bytes: imported.bytes }
     } catch (error) {
       return {
         success: false,

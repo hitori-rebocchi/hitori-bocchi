@@ -283,7 +283,7 @@ export interface IApi {
     items: Array<{ skinNumber: number; fileLabel: string; displayName: string }>
     outputDir: string
     author: string
-  }) => Promise<{ success: boolean; written?: string[]; error?: string }>
+  }) => Promise<{ success: boolean; written?: string[]; error?: string; code?: string }>
   localFantomeGenerateForSkin: (args: {
     championKey: string
     skinNum: number
@@ -292,7 +292,7 @@ export interface IApi {
     leagueDir?: string
     chromaIndex?: number
     chromaIdLabel?: string
-  }) => Promise<{ success: boolean; localPath?: string; error?: string }>
+  }) => Promise<{ success: boolean; localPath?: string; error?: string; code?: string }>
   localFantomeHashtableStatus: () => Promise<{
     success: boolean
     exists: boolean
@@ -301,6 +301,18 @@ export interface IApi {
   localFantomeHashtableDownload: () => Promise<{
     success: boolean
     path?: string
+    error?: string
+  }>
+  localFantomeHashtableSourceUrl: () => Promise<{
+    success: boolean
+    url?: string
+    error?: string
+  }>
+  localFantomeHashtableImport: () => Promise<{
+    success: boolean
+    path?: string
+    bytes?: number
+    canceled?: boolean
     error?: string
   }>
   onLocalFantomeProgress: (

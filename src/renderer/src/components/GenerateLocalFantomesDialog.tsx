@@ -48,6 +48,8 @@ export const GenerateLocalFantomesDialog: React.FC<GenerateLocalFantomesDialogPr
   const [hashtableReady, setHashtableReady] = useState<boolean | null>(null)
   const [hashtableDownloading, setHashtableDownloading] = useState(false)
   const [hashtableProgress, setHashtableProgress] = useState(0)
+  const [hashtableError, setHashtableError] = useState<string | null>(null)
+  const [hashtableImporting, setHashtableImporting] = useState(false)
   const [champions, setChampions] = useState<ChampionEntry[]>([])
   const [championFilter, setChampionFilter] = useState('')
   const [selectedChampion, setSelectedChampion] = useState<ChampionEntry | null>(null)
@@ -135,11 +137,46 @@ export const GenerateLocalFantomesDialog: React.FC<GenerateLocalFantomesDialogPr
   const downloadHashtable = useCallback(async () => {
     setHashtableDownloading(true)
     setHashtableProgress(0)
+    setHashtableError(null)
     try {
       const res = await window.api.localFantomeHashtableDownload()
-      if (res?.success) setHashtableReady(true)
+      if (res?.success) {
+        setHashtableReady(true)
+      } else {
+        setHashtableError(res?.error ?? 'Download failed')
+      }
+    } catch (e) {
+      setHashtableError(e instanceof Error ? e.message : String(e))
     } finally {
       setHashtableDownloading(false)
+    }
+  }, [])
+
+  // Manual fallback when CommunityDragon is blocked: open the file in the
+  // browser to save it, then import it from disk.
+  const openHashtableSource = useCallback(async () => {
+    try {
+      const res = await window.api.localFantomeHashtableSourceUrl()
+      if (res?.success && res.url) window.api.openExternal?.(res.url)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const importHashtable = useCallback(async () => {
+    setHashtableImporting(true)
+    setHashtableError(null)
+    try {
+      const res = await window.api.localFantomeHashtableImport()
+      if (res?.success) {
+        setHashtableReady(true)
+      } else if (!res?.canceled) {
+        setHashtableError(res?.error ?? 'Import failed')
+      }
+    } catch (e) {
+      setHashtableError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setHashtableImporting(false)
     }
   }, [])
 
@@ -277,20 +314,52 @@ export const GenerateLocalFantomesDialog: React.FC<GenerateLocalFantomesDialogPr
                   {hashtableDownloading && (
                     <Progress value={hashtableProgress} className="mt-2 h-1.5" />
                   )}
+                  {hashtableError && (
+                    <div className="mt-2 text-xs text-red-400">
+                      {hashtableError}
+                      <div className="mt-1 text-text-secondary">
+                        CommunityDragon may be temporarily unreachable from your network — this is
+                        on their side, not bocchi. You can download the file manually and import it.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-              <Button onClick={downloadHashtable} disabled={hashtableDownloading} size="sm">
-                {hashtableDownloading ? (
+              <div className="flex flex-col gap-1.5 shrink-0">
+                <Button onClick={downloadHashtable} disabled={hashtableDownloading} size="sm">
+                  {hashtableDownloading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      {hashtableProgress}%
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5 mr-1.5" />{' '}
+                      {hashtableError ? 'Retry' : 'Download'}
+                    </>
+                  )}
+                </Button>
+                {hashtableError && (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    {hashtableProgress}%
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-3.5 h-3.5 mr-1.5" /> Download
+                    <Button onClick={openHashtableSource} variant="outline" size="sm">
+                      Open source URL
+                    </Button>
+                    <Button
+                      onClick={importHashtable}
+                      variant="outline"
+                      size="sm"
+                      disabled={hashtableImporting}
+                    >
+                      {hashtableImporting ? (
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <FolderOpen className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      Import file
+                    </Button>
                   </>
                 )}
-              </Button>
+              </div>
             </div>
           </div>
         )}

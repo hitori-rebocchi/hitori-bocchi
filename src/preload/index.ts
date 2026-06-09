@@ -198,6 +198,8 @@ const api = {
   }) => ipcRenderer.invoke('local-fantome:generate-for-skin', args),
   localFantomeHashtableStatus: () => ipcRenderer.invoke('local-fantome:hashtable-status'),
   localFantomeHashtableDownload: () => ipcRenderer.invoke('local-fantome:hashtable-download'),
+  localFantomeHashtableSourceUrl: () => ipcRenderer.invoke('local-fantome:hashtable-source-url'),
+  localFantomeHashtableImport: () => ipcRenderer.invoke('local-fantome:hashtable-import'),
   onLocalFantomeProgress: (
     callback: (p: {
       current: number
