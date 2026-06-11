@@ -13,6 +13,7 @@ import { ToolsDownloadModal } from './components/sections/ToolsDownloadModal'
 import { DragDropOverlay } from './components/sections/DragDropOverlay'
 import { ChampionListSection } from './components/sections/ChampionListSection'
 import { SkinBrowserSection } from './components/sections/SkinBrowserSection'
+import { ConfirmHost } from './components/ConfirmHost'
 import { DialogsContainer } from './components/sections/DialogsContainer'
 import { MainLayout } from './components/sections/MainLayout'
 import { NoChampionData } from './components/sections/NoChampionData'
@@ -855,26 +856,49 @@ function AppContent(): React.JSX.Element {
 
   // Handle skin click
   const handleSkinClick = useCallback(
-    (champion: Champion, skin: Skin, chromaId?: string, variantId?: string) => {
+    (
+      champion: Champion,
+      skin: Skin,
+      chromaId?: string,
+      variantId?: string,
+      downloadedFilenameOverride?: string
+    ) => {
       if (!gamePath) {
         setStatusMessage(t('status.pleaseSetGamePath'))
         return
       }
 
+      // A locally-generated form (pinned filename) was just (re)generated, so
+      // always (re)select it fresh — never toggle off — so a re-pick can't
+      // leave a stale file selected.
+      const isFormSelection = !!downloadedFilenameOverride
+
       // Check for existing selection
-      const existingIndex = selectedSkins.findIndex((s) => {
-        return (
-          s.championKey === champion.key &&
-          s.skinId === skin.id &&
-          s.chromaId === (chromaId || undefined) &&
-          s.variantId === (variantId || undefined)
-        )
-      })
+      const existingIndex = isFormSelection
+        ? -1
+        : selectedSkins.findIndex((s) => {
+            return (
+              s.championKey === champion.key &&
+              s.skinId === skin.id &&
+              s.chromaId === (chromaId || undefined) &&
+              s.variantId === (variantId || undefined)
+            )
+          })
 
       if (existingIndex >= 0) {
         // Remove from selection
         setSelectedSkins((prev) => prev.filter((_, index) => index !== existingIndex))
       } else {
+        // Variant fantomes are stored under the form's own name, so pin the
+        // filename the patcher must resolve (mirrors skinDownloader naming).
+        // A locally-generated form passes the name explicitly via the override.
+        const variant = variantId ? skin.variants?.items.find((v) => v.id === variantId) : undefined
+        const downloadedFilename =
+          downloadedFilenameOverride ??
+          (variant
+            ? `${sanitizeSkinNameForPath(variant.displayName || variant.name)}.zip`
+            : undefined)
+
         // Add to selection
         const newSelectedSkin = {
           championKey: champion.key,
@@ -888,9 +912,17 @@ function AppContent(): React.JSX.Element {
           chromaId: chromaId,
           variantId: variantId,
           isDownloaded: false,
-          isAutoSelected: false
+          isAutoSelected: false,
+          downloadedFilename
         }
-        setSelectedSkins((prev) => [...prev, newSelectedSkin])
+        // Picking an exalted form (pinned filename) switches the active form:
+        // drop any other form/base selection of the same skin so only one wins.
+        setSelectedSkins((prev) => {
+          const base = isFormSelection
+            ? prev.filter((s) => !(s.championKey === champion.key && s.skinId === skin.id))
+            : prev
+          return [...base, newSelectedSkin]
+        })
       }
     },
     [gamePath, setStatusMessage, t, selectedSkins, setSelectedSkins]
@@ -966,6 +998,7 @@ function AppContent(): React.JSX.Element {
       </MainLayout>
 
       <DialogsContainer />
+      <ConfirmHost />
     </>
   )
 }

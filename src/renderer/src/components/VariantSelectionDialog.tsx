@@ -4,6 +4,7 @@ import { Champion, Skin } from '../App'
 import { type SelectedSkin } from '../store/atoms'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog'
 import { Button } from './ui/button'
+import { sanitizeSkinNameForPath } from '../../../shared/utils/skinFilename'
 
 interface VariantSelectionDialogProps {
   open: boolean
@@ -43,11 +44,9 @@ export const VariantSelectionDialog: React.FC<VariantSelectionDialogProps> = ({
     )
   }
 
-  const isVariantDownloaded = (variant: { githubUrl: string; downloadUrl?: string }) => {
-    // Extract filename from variant URL (use downloadUrl if available, otherwise githubUrl)
-    const urlToCheck = variant.downloadUrl || variant.githubUrl
-    const urlParts = urlToCheck.split('/')
-    const variantFileName = decodeURIComponent(urlParts[urlParts.length - 1])
+  const isVariantDownloaded = (variant: { name: string; displayName?: string }) => {
+    // Variants are stored as "{sanitized form display name}.zip"
+    const variantFileName = `${sanitizeSkinNameForPath(variant.displayName || variant.name)}.zip`
 
     return downloadedSkins.some(
       (ds) => ds.championName === champion.key && ds.skinName === variantFileName

@@ -56,6 +56,37 @@ enum Command {
         #[arg(long)]
         request_json: String,
     },
+    /// Count exalted in-game forms for a skin. Reads a JSON FormsRequest
+    /// (wadPath, champion, skinNumber) from --request-json (or stdin if "-")
+    /// and prints {"formCount": N} on stdout.
+    ListForms {
+        /// Path to a JSON file with the request, or "-" to read from stdin.
+        #[arg(long)]
+        request_json: String,
+    },
+    /// Diagnostic: list a WAD's chunk paths (resolved via the hashtable).
+    WadInfo {
+        /// Path to the .wad.client file.
+        #[arg(long)]
+        wad: PathBuf,
+        /// Path to the hashtable (hashes.game.txt).
+        #[arg(long)]
+        hashtable: PathBuf,
+    },
+    /// Diagnostic: parse a .bin and re-serialize, reporting byte-identity.
+    ValidateBin {
+        #[arg(long)]
+        path: PathBuf,
+    },
+    /// Diagnostic: extract every chunk of a WAD to a directory.
+    WadExtract {
+        #[arg(long)]
+        wad: PathBuf,
+        #[arg(long)]
+        hashtable: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Load cslol-dll.dll and run the patcher loop until stdin closes.
     ///
     /// Stdout streams `[DLL] ...` log lines for the parent process;
@@ -91,6 +122,31 @@ fn main() -> Result<()> {
             mods,
         } => overlay::build_overlay(&game, &overlay, &state, &mods),
         Command::Fantonize { request_json } => cmd_fantonize(&request_json),
+        Command::ListForms { request_json } => cmd_list_forms(&request_json),
+        Command::WadInfo { wad, hashtable } => {
+            for p in skin0_swap::wad_info(&wad, &hashtable)? {
+                println!("{}", p);
+            }
+            Ok(())
+        }
+        Command::ValidateBin { path } => {
+            let data = std::fs::read(&path)?;
+            match bin_parser::validate_roundtrip(&data) {
+                Ok(()) => {
+                    eprintln!("OK: round-trips byte-identical ({} bytes)", data.len());
+                    Ok(())
+                }
+                Err(e) => {
+                    eprintln!("MISMATCH: {}", e);
+                    Ok(())
+                }
+            }
+        }
+        Command::WadExtract { wad, hashtable, out } => {
+            let n = skin0_swap::wad_extract(&wad, &hashtable, &out)?;
+            eprintln!("extracted {} chunks to {}", n, out.display());
+            Ok(())
+        }
         Command::Patcher {
             dll,
             overlay_root,
@@ -123,6 +179,24 @@ fn cmd_fantonize(request_arg: &str) -> Result<()> {
     let results = skin0_swap::generate_fantomes(&request)?;
     let out = serde_json::to_string(&results)?;
     println!("{}", out);
+    Ok(())
+}
+
+fn cmd_list_forms(request_arg: &str) -> Result<()> {
+    let json_text = if request_arg == "-" {
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("reading FormsRequest JSON from stdin")?;
+        buf
+    } else {
+        std::fs::read_to_string(request_arg)
+            .with_context(|| format!("reading FormsRequest JSON from {}", request_arg))?
+    };
+    let request: skin0_swap::FormsRequest =
+        serde_json::from_str(&json_text).context("parsing FormsRequest JSON")?;
+    let result = skin0_swap::list_forms(&request)?;
+    println!("{}", serde_json::to_string(&result)?);
     Ok(())
 }
 

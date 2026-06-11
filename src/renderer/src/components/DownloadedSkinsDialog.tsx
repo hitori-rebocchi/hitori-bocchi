@@ -5,6 +5,7 @@ import { Input } from './ui/input'
 import { Badge } from './ui/badge'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog'
 import { getChampionDisplayName } from '../utils/championUtils'
+import { confirmDialog } from './ConfirmHost'
 
 interface DownloadedSkinsDialogProps {
   isOpen: boolean
@@ -120,7 +121,7 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
   }
 
   const handleDeleteAllSkins = async () => {
-    if (!confirm(t('confirmations.confirmDeleteAll'))) return
+    if (!(await confirmDialog(t('confirmations.confirmDeleteAll')))) return
 
     setIsDeletingAll(true)
     try {
@@ -169,7 +170,10 @@ export const DownloadedSkinsDialog: React.FC<DownloadedSkinsDialogProps> = ({
     const champion = championData?.champions.find((c) => c.key === championKey)
     const championName = champion ? getChampionDisplayName(champion) : championKey
 
-    if (!confirm(t('confirmations.confirmDeleteChampion', { champion: championName }))) return
+    if (
+      !(await confirmDialog(t('confirmations.confirmDeleteChampion', { champion: championName })))
+    )
+      return
 
     setDeletingChampions((prev) => new Set(prev).add(championKey))
     try {

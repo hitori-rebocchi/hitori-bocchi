@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { PresetCard } from './PresetCard'
+import { confirmDialog } from './ConfirmHost'
 import { presetService } from '../services/presetService'
 import { toast } from 'sonner'
 import {
@@ -77,7 +78,7 @@ export const PresetsDialog: React.FC<PresetsDialogProps> = ({ onApplyPreset }) =
     if (!preset) return
 
     // Show confirmation
-    const confirmed = window.confirm(t('presets.deleteConfirm', { name: preset.name }))
+    const confirmed = await confirmDialog(t('presets.deleteConfirm', { name: preset.name }))
     if (!confirmed) return
 
     try {

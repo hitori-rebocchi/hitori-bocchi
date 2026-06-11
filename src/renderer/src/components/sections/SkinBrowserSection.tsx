@@ -8,6 +8,7 @@ import { FilterPanel } from '../FilterPanel'
 import { GridViewToggle } from '../GridViewToggle'
 import { FileUploadButton } from '../FileUploadButton'
 import { LOCAL_FANTOME_ONLY_MODE } from '../../../../shared/constants/features'
+import { sanitizeSkinNameForPath } from '../../../../shared/utils/skinFilename'
 import { filtersAtom, skinSearchQueryAtom, viewModeAtom } from '../../store/atoms'
 import { showDownloadedSkinsDialogAtom } from '../../store/atoms/ui.atoms'
 import {
@@ -25,7 +26,13 @@ import type { Champion, Skin } from '../../App'
 interface SkinBrowserSectionProps {
   loading: boolean
   onEditCustomSkin: (skinPath: string, currentName: string) => Promise<void>
-  onSkinClick: (champion: Champion, skin: Skin, chromaId?: string) => void
+  onSkinClick: (
+    champion: Champion,
+    skin: Skin,
+    chromaId?: string,
+    variantId?: string,
+    downloadedFilename?: string
+  ) => void
   selectedSkins: any[]
   fileUploadRef: React.MutableRefObject<any>
 }
@@ -154,6 +161,63 @@ export function SkinBrowserSection({
     [onSkinClick, loadDownloadedSkins]
   )
 
+  /**
+   * Same flow as handleGenerateLocal but for exalted-skin forms. formIndex 0 is
+   * the default (base) form and passes no formLabel; index N>0 passes a
+   * filesystem-safe formLabel so the backend names files so forms coexist.
+   */
+  const handleGenerateForm = useCallback(
+    async (champion: Champion, skin: Skin, formIndex: number, formLabel?: string) => {
+      if (!LOCAL_FANTOME_ONLY_MODE) {
+        onSkinClick(champion, skin)
+        return
+      }
+      const baseName = sanitizeSkinNameForPath(skin.nameEn || skin.name)
+      const onDiskBase = formLabel ? `${baseName} ${formLabel}` : baseName
+
+      const settings = (await window.api.getSettings()) as Record<string, unknown> | null
+      const author = ((settings?.localFantomeAuthor as string) || 'bocchi').trim() || 'bocchi'
+      const leagueDir = (settings?.localFantomeLeagueDir as string) || undefined
+
+      const formSuffix = formLabel ? ` (${formLabel})` : ''
+      const toastId = toast.loading(`Generating ${skin.name}${formSuffix}…`, {
+        description: `${champion.name} from your local WAD`
+      })
+      try {
+        const res = await window.api.localFantomeGenerateForSkin({
+          championKey: champion.key,
+          skinNum: skin.num,
+          // English name keeps the on-disk filename stable across UI locales.
+          skinName: skin.nameEn || skin.name,
+          author,
+          leagueDir,
+          formIndex,
+          ...(formLabel ? { formLabel } : {})
+        })
+        if (!res?.success) {
+          toast.error(`Failed: ${res?.error ?? 'unknown error'}`, { id: toastId })
+          return
+        }
+        toast.success(`Generated ${skin.name}${formSuffix}`, {
+          id: toastId,
+          description: 'Saved to your library'
+        })
+        await loadDownloadedSkins()
+        // Select the generated form: pin its on-disk filename so the patcher
+        // resolves it, and use the form label as variantId so distinct forms
+        // don't collide in the selection. Default form (no label) selects base.
+        if (formLabel) {
+          onSkinClick(champion, skin, undefined, formLabel, `${onDiskBase}.zip`)
+        } else {
+          onSkinClick(champion, skin)
+        }
+      } catch (e) {
+        toast.error(`Failed: ${e instanceof Error ? e.message : String(e)}`, { id: toastId })
+      }
+    },
+    [onSkinClick, loadDownloadedSkins]
+  )
+
   if (!championData) return null
 
   return (
@@ -256,6 +320,7 @@ export function SkinBrowserSection({
                     onEditCustomSkin={onEditCustomSkin}
                     onGenerateLocal={handleGenerateLocal}
                     onGenerateChroma={handleGenerateChroma}
+                    onGenerateForm={handleGenerateForm}
                     containerWidth={width}
                     containerHeight={height}
                   />

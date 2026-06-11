@@ -20,4 +20,21 @@ LOCAL_NOTES.md
 
 # Proprietary fantome generation algorithm (release-binary only)
 native/bocchi-overlay/src/skin0_swap_impl.rs
+native/bocchi-overlay/src/skin0_swap_impl.rs.*
 .re-workspace/
+# Repo git anidado que versiona el generador privado (no redistribuible)
+native/bocchi-overlay/src/.git/
+
+# Personal/local Claude settings — contains absolute user paths, never distribute
+.claude/settings.local.json
+
+# Local backups & WIP dumps (may hold the private impl or absolute paths)
+*.bak
+*_backup.txt
+
+# Local fantome extraction/verification scratch
+.fantome-verify/
+
+# Local-only artifacts
+bun.lock
+.claude/scheduled_tasks.lock

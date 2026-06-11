@@ -143,11 +143,19 @@ export const championSkinsMapAtom = atom((get) => {
       if (champion.key !== 'Custom') {
         const sanitizedDisplay = sanitizeSkinNameForPath(displayName).toLowerCase()
         const chromaMatch = sanitizedDisplay.match(/^(.+)\s+(\d+)$/)
+        // Exalted forms are named `{base} Form N[ Token]` by the local
+        // generator; suppress their separate tile like chromas so the form
+        // lives on the parent exalted card.
+        const formMatch = sanitizedDisplay.match(/^(.+?)\s+form\s+\d+(?:\s+.+)?$/)
         for (const s of champion.skins) {
           if (s.num === 0) continue
           const baseCandidates = [s.nameEn, s.name].filter(Boolean) as string[]
           const baseSanitized = baseCandidates.map((n) => sanitizeSkinNameForPath(n).toLowerCase())
           if (baseSanitized.includes(sanitizedDisplay)) {
+            matchesRiotSkin = true
+            break
+          }
+          if (formMatch && baseSanitized.includes(formMatch[1].trim())) {
             matchesRiotSkin = true
             break
           }

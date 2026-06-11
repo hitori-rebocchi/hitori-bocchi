@@ -32,6 +32,8 @@ asarUnpack:
 extraResources:
   - from: native/bocchi-overlay/target/release/ltk-manager.exe
     to: ltk-manager.exe
+  - from: resources/form-previews
+    to: form-previews
 win:
   executableName: electron
   target:

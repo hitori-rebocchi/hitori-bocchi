@@ -6,7 +6,9 @@ import type { SelectedSkin } from '../store/atoms'
 import { isOldFormatCustomId } from '../utils/customModId'
 import { ChromaColorPie } from './ChromaColorPie'
 import { ChromaSelectionDialog } from './ChromaSelectionDialog'
+import { FormSelectionDialog, type SkinForm } from './FormSelectionDialog'
 import { VariantSelectionDialog } from './VariantSelectionDialog'
+import { confirmDialog } from './ConfirmHost'
 import { Button } from './ui/button'
 import { generateSkinFilename, sanitizeSkinNameForPath } from '../../../shared/utils/skinFilename'
 
@@ -45,6 +47,12 @@ interface VirtualizedSkinGridProps {
    * resolve the WAD skinNumber for the Nth chroma of the base skin.
    */
   onGenerateChroma?: (champion: Champion, skin: Skin, chromaId: string, chromaIndex: number) => void
+  /**
+   * Called when the user picks a form for an exalted skin. formIndex 0 is the
+   * default (base) form and carries no formLabel; index N>0 passes a
+   * filesystem-safe formLabel so forms coexist on disk (like chromas).
+   */
+  onGenerateForm?: (champion: Champion, skin: Skin, formIndex: number, formLabel?: string) => void
   containerWidth: number
   containerHeight: number
 }
@@ -64,6 +72,7 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
   onEditCustomSkin,
   onGenerateLocal,
   onGenerateChroma,
+  onGenerateForm,
   containerWidth,
   containerHeight
 }) => {
@@ -79,6 +88,21 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
     champion: Champion | null
     skin: Skin | null
   }>({ open: false, champion: null, skin: null })
+  const [formDialogState, setFormDialogState] = useState<{
+    open: boolean
+    champion: Champion | null
+    skin: Skin | null
+    forms: SkinForm[]
+    skinImageUrl: string
+    formImageUrls: Record<number, string>
+  }>({
+    open: false,
+    champion: null,
+    skin: null,
+    forms: [],
+    skinImageUrl: '',
+    formImageUrls: {}
+  })
 
   // Calculate grid dimensions based on view mode
   const { columnCount, columnWidth, rowHeight } = useMemo(() => {
@@ -296,8 +320,81 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
       // Non-downloaded, non-Custom skins generate on first click (LOCAL_FANTOME_ONLY_MODE).
       // The handler stays a no-op if isDownloaded or champion.key === 'Custom'.
       const isMissingLocally = !isDownloaded && champion.key !== 'Custom'
+      // Both tiers ship the gear-form mechanic: kExalted (Viego/Mel) and
+      // kTranscendent (Immortalized Legend Ahri/Kai'Sa evolution tiers).
+      const isExalted = skin.rarity === 'kExalted' || skin.rarity === 'kTranscendent'
+
+      // Open the exalted form picker: enumerate forms (cheap, skips the
+      // hashtable) and show the dialog. Falls back to a plain generate when the
+      // skin has 0/1 forms or the form API is unavailable.
+      const openFormPicker = (): void => {
+        const listForms = window.api.localFantomeListForms
+        if (!listForms || !onGenerateForm) {
+          if (isMissingLocally && onGenerateLocal) onGenerateLocal(champion, skin)
+          else onSkinClick(champion, skin)
+          return
+        }
+        listForms({ championKey: champion.key, skinNum: skin.num })
+          .then((res) => {
+            if (res?.success && res.forms.length > 1) {
+              // Open immediately with the parent-skin fallback, then fill in
+              // per-form preview images when they resolve (non-blocking).
+              setFormDialogState({
+                open: true,
+                champion,
+                skin,
+                forms: res.forms,
+                skinImageUrl: getSkinImageUrl(
+                  champion.key,
+                  skin.num,
+                  skin.id,
+                  downloadedSkin?.localPath
+                ),
+                formImageUrls: {}
+              })
+              if (window.api.getFormPreviewUrls) {
+                window.api
+                  .getFormPreviewUrls({
+                    championKey: champion.key,
+                    championId: champion.id,
+                    skinNum: skin.num
+                  })
+                  .then((imgRes) => {
+                    if (imgRes?.success && imgRes.urls) {
+                      setFormDialogState((prev) =>
+                        prev.open && prev.skin?.id === skin.id
+                          ? { ...prev, formImageUrls: imgRes.urls }
+                          : prev
+                      )
+                    }
+                  })
+                  .catch(() => {
+                    // Image fetch is best-effort; fallback image already shown.
+                  })
+              }
+            } else if (isMissingLocally && onGenerateLocal) {
+              onGenerateLocal(champion, skin)
+            } else {
+              onSkinClick(champion, skin)
+            }
+          })
+          .catch(() => {
+            if (isMissingLocally && onGenerateLocal) onGenerateLocal(champion, skin)
+            else onSkinClick(champion, skin)
+          })
+      }
+
       const handleSkinClick = (): void => {
         if (loading) return
+        if (skin.variants && skin.variants.items.length > 0) {
+          setVariantDialogState({ open: true, champion, skin })
+          return
+        }
+        // Exalted skins always open the form picker so the user can switch forms.
+        if (isExalted && onGenerateForm) {
+          openFormPicker()
+          return
+        }
         if (isMissingLocally && onGenerateLocal) {
           onGenerateLocal(champion, skin)
         } else {
@@ -377,6 +474,32 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
                       size={24}
                       className=""
                     />
+                  </Button>
+                )}
+                {isExalted && onGenerateForm && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-8 h-8 p-1 bg-surface hover:bg-secondary-100 dark:hover:bg-secondary-800 border border-border"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openFormPicker()
+                    }}
+                    title="Select form" // TODO i18n
+                  >
+                    <svg
+                      className="w-5 h-5 text-primary-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 7l4-4 4 4M8 3v12M20 17l-4 4-4-4M16 21V9"
+                      />
+                    </svg>
                   </Button>
                 )}
                 {skin.variants && skin.variants.items.length > 0 && (
@@ -473,10 +596,12 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
                           variant="destructive"
                           size="icon"
                           className="w-8 h-8 rounded-full"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation()
                             if (
-                              confirm(t('confirmations.confirmDeleteSkin', { skin: skin.name }))
+                              await confirmDialog(
+                                t('confirmations.confirmDeleteSkin', { skin: skin.name })
+                              )
                             ) {
                               onDeleteCustomSkin(downloadedSkin.localPath!, downloadedSkin.skinName)
                             }
@@ -629,10 +754,41 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
                   </svg>
                 </div>
               )}
+              {/* Floating form picker button for exalted skins */}
+              {isExalted && onGenerateForm && (
+                <div
+                  className={`absolute bottom-2 ${chromas.length > 0 ? 'left-[5.5rem]' : 'left-12'} w-8 h-8 rounded-full bg-white dark:bg-charcoal-800 backdrop-blur-sm hover:bg-charcoal-50 dark:hover:bg-charcoal-700 transition-all cursor-pointer shadow-lg flex items-center justify-center ring-2 ring-white dark:ring-charcoal-700`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openFormPicker()
+                  }}
+                  title="Select form" // TODO i18n
+                >
+                  <svg
+                    className="w-5 h-5 text-primary-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 7l4-4 4 4M8 3v12M20 17l-4 4-4-4M16 21V9"
+                    />
+                  </svg>
+                </div>
+              )}
               {/* Rarity gem */}
               {skin.rarityGemPath && (
                 <div
-                  className={`absolute bottom-2 ${chromas.length > 0 && skin.variants && skin.variants.items.length > 0 ? 'left-[9rem]' : chromas.length > 0 || (skin.variants && skin.variants.items.length > 0) ? 'left-[5.5rem]' : 'left-12'} w-8 h-8`}
+                  className={`absolute bottom-2 ${
+                    (chromas.length > 0 ? 1 : 0) + (isExalted && onGenerateForm ? 1 : 0) === 2
+                      ? 'left-[9rem]'
+                      : (chromas.length > 0 ? 1 : 0) + (isExalted && onGenerateForm ? 1 : 0) === 1
+                        ? 'left-[5.5rem]'
+                        : 'left-12'
+                  } w-8 h-8`}
                 >
                   <img
                     src={skin.rarityGemPath}
@@ -677,9 +833,13 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
                         variant="destructive"
                         size="icon"
                         className="absolute top-18 right-2 w-6 h-6 rounded-full opacity-0 group-hover:opacity-100 shadow-lg"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation()
-                          if (confirm(t('confirmations.confirmDeleteSkin', { skin: skin.name }))) {
+                          if (
+                            await confirmDialog(
+                              t('confirmations.confirmDeleteSkin', { skin: skin.name })
+                            )
+                          ) {
                             onDeleteCustomSkin(downloadedSkin.localPath!, downloadedSkin.skinName)
                           }
                         }}
@@ -733,6 +893,8 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
       onSkinClick,
       onToggleFavorite,
       onDeleteCustomSkin,
+      onGenerateLocal,
+      onGenerateForm,
       t,
       onEditCustomSkin,
       getSkinImageUrl
@@ -791,6 +953,31 @@ export const VirtualizedSkinGrid: React.FC<VirtualizedSkinGridProps> = ({
           }}
           favorites={favorites}
           onToggleVariantFavorite={onToggleVariantFavorite}
+        />
+      )}
+
+      {formDialogState.champion && formDialogState.skin && onGenerateForm && (
+        <FormSelectionDialog
+          open={formDialogState.open}
+          onOpenChange={(open) => {
+            if (!open) {
+              setFormDialogState({
+                open: false,
+                champion: null,
+                skin: null,
+                forms: [],
+                skinImageUrl: '',
+                formImageUrls: {}
+              })
+            }
+          }}
+          champion={formDialogState.champion}
+          skin={formDialogState.skin}
+          forms={formDialogState.forms}
+          skinImageUrl={formDialogState.skinImageUrl}
+          formImageUrls={formDialogState.formImageUrls}
+          downloadedSkins={downloadedSkins}
+          onGenerateForm={onGenerateForm}
         />
       )}
     </>

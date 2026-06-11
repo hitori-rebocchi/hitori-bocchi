@@ -6,10 +6,12 @@ import {
   fetchLatestVersion,
   fetchChampionData as fetchFromApis,
   type Champion,
-  type Skin
+  type Skin,
+  type SkinVariant
 } from './championFetcher'
+import { LOCAL_FANTOME_ONLY_MODE } from '../../shared/constants/features'
 
-export type { Champion, Skin }
+export type { Champion, Skin, SkinVariant }
 
 interface CachedFile {
   version: string
@@ -25,6 +27,34 @@ export class ChampionDataService {
 
   private getCacheDir(): string {
     return path.join(app.getPath('userData'), 'champion-data')
+  }
+
+  /**
+   * Attaches exalted/ultimate form variants from the active skins repository.
+   * Lazy-required: repositoryService statically imports this module, so a
+   * top-level import here would close a cycle during module init.
+   */
+  private async attachVariants(champions: Champion[]): Promise<void> {
+    // Form variants are downloaded pre-baked from the repo; with repo
+    // downloads disabled the picker would dead-end. Local generation only
+    // yields the skin's default (Form 1), so exalted skins just generate
+    // their base like any other skin until downloads are re-enabled. Strip
+    // any variants a prior build persisted to disk so the picker stays hidden.
+    if (LOCAL_FANTOME_ONLY_MODE) {
+      for (const champion of champions) {
+        for (const skin of champion.skins) {
+          if (skin.variants) delete skin.variants
+        }
+      }
+      return
+    }
+    try {
+      const { repositoryService } = await import('./repositoryService')
+      await repositoryService.ensureSkinIds()
+      repositoryService.attachFormVariants(champions)
+    } catch (err) {
+      console.error('[ChampionData] Failed to attach form variants:', err)
+    }
   }
 
   private getCacheFilePath(language: string): string {
@@ -72,6 +102,8 @@ export class ChampionDataService {
 
       const data = await fetchFromApis(language)
 
+      await this.attachVariants(data.champions)
+
       // Cache in memory
       this.cachedData.set(language, data)
 
@@ -101,7 +133,13 @@ export class ChampionDataService {
   ): Promise<{ version: string; champions: Champion[] } | null> {
     // Check memory cache
     const cached = this.cachedData.get(language)
-    if (cached) return cached
+    if (cached) {
+      // Re-attach in case skin ids arrived after this entry was cached
+      if (!cached.champions.some((c) => c.skins.some((s) => s.variants))) {
+        await this.attachVariants(cached.champions)
+      }
+      return cached
+    }
 
     // Deduplicate concurrent loads for the same language
     const pending = this.pendingLoads.get(language)
@@ -127,6 +165,7 @@ export class ChampionDataService {
       try {
         const latestVersion = await fetchLatestVersion()
         if (diskData.version === latestVersion) {
+          await this.attachVariants(diskData.champions)
           this.cachedData.set(language, diskData)
           console.log(`[ChampionData] Loaded ${language} from disk cache (v${diskData.version})`)
           return diskData
@@ -136,6 +175,7 @@ export class ChampionDataService {
         )
       } catch {
         // If version check fails, use disk cache anyway
+        await this.attachVariants(diskData.champions)
         this.cachedData.set(language, diskData)
         console.log(`[ChampionData] Version check failed, using disk cache for ${language}`)
         return diskData
@@ -272,6 +312,20 @@ export class ChampionDataService {
     }
 
     return champion
+  }
+
+  /** Sync lookup across whatever languages are loaded (en_US preferred). */
+  public getChampionByIdAnyLanguageSync(championId: number): Champion | null {
+    const languages = ['en_US', ...this.cachedData.keys()]
+    for (const language of languages) {
+      if (!this.cachedData.has(language)) continue
+      if (!this.championIdCache.has(language)) {
+        this.buildChampionIdCache(language, this.cachedData.get(language)!.champions)
+      }
+      const champion = this.championIdCache.get(language)?.get(championId)
+      if (champion) return champion
+    }
+    return null
   }
 }
 

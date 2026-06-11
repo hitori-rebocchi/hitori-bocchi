@@ -52,8 +52,10 @@ export function buildUserFantomeCandidates(
   }
 
   for (const base of bases) {
+    // Old-format custom mods already carry the prefix — don't double it
+    const prefixed = base.startsWith('[User] ') ? base : `[User] ${base}`
     for (const ext of EXTS) {
-      out.add(`[User] ${base}.${ext}`)
+      out.add(`${prefixed}.${ext}`)
     }
   }
 

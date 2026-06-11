@@ -309,16 +309,19 @@ export function useSkinManagement() {
 
             // Use the variant's download URL if available, otherwise use GitHub URL
             githubUrl = variant.downloadUrl || variant.githubUrl
-            // Extract filename from the URL for consistency
-            const urlParts = githubUrl.split('/')
-            skinFileName = decodeURIComponent(urlParts[urlParts.length - 1])
+            // Local filename convention: sanitized form display name (matches
+            // what skinDownloader stores for ID-based fantome URLs)
+            skinFileName = `${sanitizeSkinNameForPath(variant.displayName || variant.name)}.zip`
 
             console.log(`[Download] Using variant ${variant.name}:`)
             console.log(`  variantId: ${selectedSkin.variantId}`)
-            console.log(`  githubUrl: ${variant.githubUrl}`)
-            console.log(`  downloadUrl: ${variant.downloadUrl}`)
             console.log(`  using URL: ${githubUrl}`)
             console.log(`  filename: ${skinFileName}`)
+          } else if (selectedSkin.downloadedFilename) {
+            // Locally-generated exalted form: the file already exists on disk
+            // under this pinned name, so the download-check below matches it and
+            // no repo download is attempted (repo downloads are disabled).
+            skinFileName = selectedSkin.downloadedFilename
           } else {
             // Use centralized filename generation for regular skins and chromas
             skinFileName = generateSkinFilename({
@@ -343,9 +346,13 @@ export function useSkinManagement() {
           const baseFileName = skinFileName.replace(/\.zip$/i, '')
           const exts = ['fantome', 'zip', 'wad', 'wad.client']
           const baseNames = new Set<string>([baseFileName])
-          const localizedBase = sanitizeSkinNameForPath(skin.name)
-          const suffix = selectedSkin.chromaId ? ` ${selectedSkin.chromaId}` : ''
-          baseNames.add(`${localizedBase}${suffix}`)
+          // Localized-name alternates reference the PARENT skin — a local base
+          // fantome must not satisfy a form-variant selection
+          if (!selectedSkin.variantId) {
+            const localizedBase = sanitizeSkinNameForPath(skin.name)
+            const suffix = selectedSkin.chromaId ? ` ${selectedSkin.chromaId}` : ''
+            baseNames.add(`${localizedBase}${suffix}`)
+          }
           const userVariants = new Set<string>()
           for (const base of baseNames) {
             for (const ext of exts) {

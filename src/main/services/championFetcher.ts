@@ -60,6 +60,16 @@ export interface Chroma {
   colors: string[]
 }
 
+// Pre-baked exalted/ultimate form published in the skins repo as its own fantome
+export interface SkinVariant {
+  id: string
+  name: string
+  displayName?: string
+  githubUrl: string
+  downloadUrl?: string
+  imageUrl?: string
+}
+
 export interface Skin {
   id: string
   num: number
@@ -67,6 +77,10 @@ export interface Skin {
   nameEn?: string
   chromas: boolean
   chromaList?: Chroma[]
+  variants?: {
+    type: string
+    items: SkinVariant[]
+  }
   rarity: string
   rarityGemPath: string | null
   isLegacy: boolean

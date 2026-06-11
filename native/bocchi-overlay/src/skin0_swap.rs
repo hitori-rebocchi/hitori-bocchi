@@ -19,6 +19,14 @@ pub struct GenerationItem {
     pub skin_number: u32,
     pub file_label: String,
     pub display_name: String,
+    /// For chromas: the parent skin's number. Pets rarely have bins at chroma
+    /// slots, so the pet build falls back to this slot before skipping.
+    #[serde(default)]
+    pub parent_skin_number: Option<u32>,
+    /// For exalted skins: which in-game form to bake (gear position; 0 =
+    /// default/Form 1). Absent = no form processing.
+    #[serde(default)]
+    pub gear_index: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +50,8 @@ pub struct GenerationResult {
     pub output_path: Option<PathBuf>,
     pub size_bytes: Option<u64>,
     pub error: Option<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 pub(crate) fn xxh64_path(p: &str) -> u64 {
@@ -114,6 +124,24 @@ impl PreparedWad {
         })
     }
 
+    /// Open just the chunk index, skipping the (large) hashtable stream-load.
+    /// Enough for lookups by known path (form counting), not for the composite
+    /// path scan the full generator needs.
+    fn open_chunks_only(wad_path: &Path) -> Result<Self> {
+        let f = File::open(wad_path)
+            .with_context(|| format!("opening WAD {}", wad_path.display()))?;
+        let wad = Wad::mount(f).map_err(|e| anyhow!("Wad::mount: {}", e))?;
+        let mut chunks_by_hash: HashMap<u64, WadChunk> = HashMap::new();
+        for chunk in wad.chunks().iter() {
+            chunks_by_hash.insert(chunk.path_hash(), *chunk);
+        }
+        Ok(Self {
+            wad,
+            chunks_by_hash,
+            hash_to_path: HashMap::new(),
+        })
+    }
+
     pub(crate) fn get_chunk_bytes(&mut self, lc_path: &str) -> Option<Vec<u8>> {
         let h = xxh64_path(lc_path);
         let chunk = self.chunks_by_hash.get(&h).copied()?;
@@ -161,6 +189,7 @@ fn stream_load_hashtable(path: &Path, needed: &HashSet<u64>) -> Result<HashMap<u
 }
 
 #[cfg(feature = "private-impl")]
+#[allow(clippy::too_many_arguments)]
 fn build_fantome(
     prep: &mut PreparedWad,
     main_wad_path: &Path,
@@ -170,7 +199,9 @@ fn build_fantome(
     info_name: &str,
     info_author: &str,
     pet_names: &[String],
-) -> Result<Vec<u8>> {
+    pet_fallback_skin: Option<u32>,
+    gear_index: Option<u32>,
+) -> Result<(Vec<u8>, Vec<String>)> {
     private_impl::build_fantome(
         prep,
         main_wad_path,
@@ -180,10 +211,13 @@ fn build_fantome(
         info_name,
         info_author,
         pet_names,
+        pet_fallback_skin,
+        gear_index,
     )
 }
 
 #[cfg(not(feature = "private-impl"))]
+#[allow(clippy::too_many_arguments)]
 fn build_fantome(
     _prep: &mut PreparedWad,
     _main_wad_path: &Path,
@@ -193,12 +227,123 @@ fn build_fantome(
     _info_name: &str,
     _info_author: &str,
     _pet_names: &[String],
-) -> Result<Vec<u8>> {
+    _pet_fallback_skin: Option<u32>,
+    _gear_index: Option<u32>,
+) -> Result<(Vec<u8>, Vec<String>)> {
     anyhow::bail!(
         "This build does not include the proprietary fantome-generation \
          module. Rebuild with `--features private-impl` and the private \
          source file present, or use an official release binary."
     )
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormsRequest {
+    pub wad_path: PathBuf,
+    pub champion: String,
+    pub skin_number: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormInfo {
+    pub index: u32,
+    /// Short descriptive token derived from the form's portrait icon (may be
+    /// empty for the default form). The UI prettifies it.
+    pub label: String,
+    /// Raw in-game portrait-icon asset path for this gear (e.g.
+    /// "ASSETS/Characters/Ahri/HUD/Ahri_Circle_86_Tier2.tex"), empty when the
+    /// gear carries none. Used to source a per-form preview image.
+    pub icon_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormsResult {
+    pub forms: Vec<FormInfo>,
+}
+
+#[cfg(feature = "private-impl")]
+fn list_form_infos(bf: &crate::bin_parser::BinFile) -> Vec<(u32, String, String)> {
+    private_impl::list_form_infos(bf)
+}
+#[cfg(not(feature = "private-impl"))]
+fn list_form_infos(_bf: &crate::bin_parser::BinFile) -> Vec<(u32, String, String)> {
+    Vec::new()
+}
+
+/// Enumerate exalted forms for a skin (gear-upgrade entries on its wrapper).
+/// Empty for ordinary skins. Skips the hashtable load — looks up by path.
+pub fn list_forms(request: &FormsRequest) -> Result<FormsResult> {
+    let mut prep = PreparedWad::open_chunks_only(&request.wad_path)?;
+    let char_lc = request.champion.to_lowercase();
+    let path = format!(
+        "data/characters/{}/skins/skin{}.bin",
+        char_lc, request.skin_number
+    );
+    let forms = match prep.get_chunk_bytes(&path) {
+        Some(bytes) => match crate::bin_parser::parse_bin(&bytes) {
+            Ok(bf) => list_form_infos(&bf)
+                .into_iter()
+                .map(|(index, label, icon_path)| FormInfo {
+                    index,
+                    label,
+                    icon_path,
+                })
+                .collect(),
+            Err(_) => Vec::new(),
+        },
+        None => Vec::new(),
+    };
+    Ok(FormsResult { forms })
+}
+
+/// Diagnostic: extract every chunk of a WAD to `out_dir/<resolved path>`.
+pub fn wad_extract(wad_path: &Path, hashtable_path: &Path, out_dir: &Path) -> Result<usize> {
+    let mut prep = PreparedWad::open(wad_path, hashtable_path)?;
+    let entries: Vec<(u64, String)> = prep
+        .chunks_by_hash
+        .keys()
+        .map(|h| {
+            let p = prep
+                .hash_to_path
+                .get(h)
+                .cloned()
+                .unwrap_or_else(|| format!("unknown/{:016x}", h));
+            (*h, p)
+        })
+        .collect();
+    let mut n = 0;
+    for (_h, path) in entries {
+        if let Some(bytes) = prep.get_chunk_bytes(&path) {
+            let out = out_dir.join(&path);
+            if let Some(parent) = out.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
+            if std::fs::write(&out, &bytes).is_ok() {
+                n += 1;
+            }
+        }
+    }
+    Ok(n)
+}
+
+/// Diagnostic: list a WAD's chunk paths (resolved via the hashtable).
+pub fn wad_info(wad_path: &Path, hashtable_path: &Path) -> Result<Vec<String>> {
+    let prep = PreparedWad::open(wad_path, hashtable_path)?;
+    let mut out: Vec<String> = prep
+        .chunks_by_hash
+        .keys()
+        .map(|h| {
+            prep.hash_to_path
+                .get(h)
+                .cloned()
+                .unwrap_or_else(|| format!("<{:016x}>", h))
+        })
+        .collect();
+    out.sort();
+    Ok(out)
 }
 
 pub fn generate_fantomes(request: &GenerationRequest) -> Result<Vec<GenerationResult>> {
@@ -219,8 +364,10 @@ pub fn generate_fantomes(request: &GenerationRequest) -> Result<Vec<GenerationRe
             &item.display_name,
             &request.author,
             &request.pet_names,
+            item.parent_skin_number,
+            item.gear_index,
         ) {
-            Ok(bytes) => {
+            Ok((bytes, warnings)) => {
                 let name = format!("{}.fantome", sanitize_filename(&item.file_label));
                 let out_path = request.output_dir.join(&name);
                 match std::fs::write(&out_path, &bytes) {
@@ -230,6 +377,7 @@ pub fn generate_fantomes(request: &GenerationRequest) -> Result<Vec<GenerationRe
                         output_path: Some(out_path.clone()),
                         size_bytes: Some(bytes.len() as u64),
                         error: None,
+                        warnings,
                     },
                     Err(e) => GenerationResult {
                         success: false,
@@ -237,6 +385,7 @@ pub fn generate_fantomes(request: &GenerationRequest) -> Result<Vec<GenerationRe
                         output_path: None,
                         size_bytes: None,
                         error: Some(format!("write failed: {}", e)),
+                        warnings,
                     },
                 }
             }
@@ -246,6 +395,7 @@ pub fn generate_fantomes(request: &GenerationRequest) -> Result<Vec<GenerationRe
                 output_path: None,
                 size_bytes: None,
                 error: Some(e.to_string()),
+                warnings: Vec::new(),
             },
         };
         results.push(r);

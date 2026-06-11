@@ -1,10 +1,312 @@
 import { spawn, ChildProcess } from 'child_process'
 import path from 'path'
 import fs from 'fs/promises'
-import { createWriteStream, WriteStream } from 'fs'
+import { createReadStream, createWriteStream, WriteStream } from 'fs'
 import { app, BrowserWindow } from 'electron'
+import JSZip from 'jszip'
+import * as StreamZip from 'node-stream-zip'
 import { settingsService } from './settingsService'
 import { getSidecarPath } from '../utils/sidecarPath'
+
+export interface FantomeInfo {
+  Name: string
+  Author: string
+  Version: string
+  Description: string
+}
+
+// The mkoverlay sidecar does a strict parse: META/info.json at archive root
+// with these four exact-case string fields, plus wad-named files under WAD/.
+const WAD_ENTRY_REGEX = /\.wad(\.client|\.mobile)?$/i
+const REQUIRED_INFO_FIELDS = ['Name', 'Author', 'Version', 'Description'] as const
+
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+}
+
+export function normalizeFantomeInfo(raw: unknown, fallbackName: string): FantomeInfo {
+  const src = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const pick = (key: string): string | undefined => {
+    const value = src[key] ?? src[key.toLowerCase()]
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined
+  }
+  return {
+    Name: pick('Name') || fallbackName,
+    Author: pick('Author') || 'Unknown',
+    Version: pick('Version') || '1.0.0',
+    Description: pick('Description') || ''
+  }
+}
+
+export function hasStrictFantomeInfo(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false
+  const info = raw as Record<string, unknown>
+  return REQUIRED_INFO_FIELDS.every((field) => typeof info[field] === 'string')
+}
+
+export function ensureWadClientName(fileName: string): string {
+  if (/\.wad\.(client|mobile)$/i.test(fileName)) return fileName
+  if (/\.wad$/i.test(fileName)) return `${fileName}.client`
+  return `${fileName}.wad.client`
+}
+
+export async function assertZipEntriesSafe(
+  zip: StreamZip.StreamZipAsync,
+  targetDir: string
+): Promise<void> {
+  const root = path.resolve(targetDir)
+  const prefix = root.endsWith(path.sep) ? root : root + path.sep
+  const fold = (value: string): string =>
+    process.platform === 'win32' ? value.toLowerCase() : value
+  const entries = await zip.entries()
+  for (const entryName of Object.keys(entries)) {
+    const resolved = path.resolve(root, entryName)
+    if (fold(resolved) !== fold(root) && !fold(resolved).startsWith(fold(prefix))) {
+      throw new Error(`Archive entry escapes extraction directory: ${entryName}`)
+    }
+  }
+}
+
+async function writeZipToFile(zip: JSZip, outFile: string): Promise<void> {
+  await fs.mkdir(path.dirname(outFile), { recursive: true })
+  await new Promise<void>((resolve, reject) => {
+    zip
+      .generateNodeStream({ type: 'nodebuffer', streamFiles: true, compression: 'DEFLATE' })
+      .pipe(createWriteStream(outFile))
+      .on('finish', () => resolve())
+      .on('error', reject)
+  })
+}
+
+export async function buildFantomeFromWad(
+  wadPath: string,
+  outFile: string,
+  info: FantomeInfo
+): Promise<void> {
+  const zip = new JSZip()
+  zip.file('META/info.json', JSON.stringify(info, null, 2))
+  zip.file(`WAD/${ensureWadClientName(path.basename(wadPath))}`, createReadStream(wadPath))
+  await writeZipToFile(zip, outFile)
+}
+
+async function isWadFileBySignature(filePath: string): Promise<boolean> {
+  try {
+    const handle = await fs.open(filePath, 'r')
+    try {
+      const buffer = Buffer.alloc(2)
+      const { bytesRead } = await handle.read(buffer, 0, 2, 0)
+      return bytesRead === 2 && buffer[0] === 0x52 && buffer[1] === 0x57
+    } finally {
+      await handle.close()
+    }
+  } catch {
+    return false
+  }
+}
+
+async function addDirToZip(zip: JSZip, dir: string, zipPrefix: string): Promise<void> {
+  const entries = await fs.readdir(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    const absPath = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      await addDirToZip(zip, absPath, `${zipPrefix}/${entry.name}`)
+    } else if (entry.isFile()) {
+      zip.file(`${zipPrefix}/${entry.name}`, createReadStream(absPath))
+    }
+  }
+}
+
+async function resolveFantomeContentRoot(srcDir: string): Promise<string> {
+  const entries = await fs.readdir(srcDir, { withFileTypes: true })
+  if (entries.some((e) => e.isDirectory() && /^(meta|wad|raw)$/i.test(e.name))) return srcDir
+  const dirs = entries.filter((e) => e.isDirectory())
+  if (dirs.length === 1) {
+    const inner = path.join(srcDir, dirs[0].name)
+    const innerEntries = await fs.readdir(inner, { withFileTypes: true })
+    if (innerEntries.some((e) => e.isDirectory() && /^(meta|wad)$/i.test(e.name))) return inner
+  }
+  return srcDir
+}
+
+export async function buildFantomeFromDirectory(
+  srcDir: string,
+  outFile: string,
+  fallbackName: string
+): Promise<void> {
+  const root = await resolveFantomeContentRoot(srcDir)
+  const dirNames = new Map<string, string>()
+  for (const entry of await fs.readdir(root, { withFileTypes: true })) {
+    if (entry.isDirectory()) dirNames.set(entry.name.toLowerCase(), entry.name)
+  }
+
+  const wadDirName = dirNames.get('wad')
+  if (!wadDirName) {
+    throw new Error('no WAD folder found in mod')
+  }
+
+  let rawInfo: unknown = null
+  const metaDirName = dirNames.get('meta')
+  if (metaDirName) {
+    try {
+      const content = await fs.readFile(path.join(root, metaDirName, 'info.json'), 'utf-8')
+      rawInfo = JSON.parse(stripBom(content))
+    } catch {
+      rawInfo = null
+    }
+  }
+
+  const zip = new JSZip()
+  zip.file('META/info.json', JSON.stringify(normalizeFantomeInfo(rawInfo, fallbackName), null, 2))
+
+  if (metaDirName) {
+    const metaDir = path.join(root, metaDirName)
+    for (const entry of await fs.readdir(metaDir, { withFileTypes: true })) {
+      if (entry.name.toLowerCase() === 'info.json') continue
+      const absPath = path.join(metaDir, entry.name)
+      if (entry.isDirectory()) {
+        await addDirToZip(zip, absPath, `META/${entry.name}`)
+      } else if (entry.isFile()) {
+        zip.file(`META/${entry.name}`, createReadStream(absPath))
+      }
+    }
+  }
+
+  let wadCount = 0
+  const wadDir = path.join(root, wadDirName)
+  for (const entry of await fs.readdir(wadDir, { withFileTypes: true })) {
+    const absPath = path.join(wadDir, entry.name)
+    if (entry.isDirectory()) {
+      // Loose-tree layout: WAD/<name>.wad.client/ is a directory of override
+      // files (our bins-only format). Carry the whole subtree verbatim.
+      if (WAD_ENTRY_REGEX.test(entry.name)) {
+        await addDirToZip(zip, absPath, `WAD/${entry.name}`)
+        wadCount++
+      }
+      continue
+    }
+    if (!entry.isFile()) continue
+    if (WAD_ENTRY_REGEX.test(entry.name)) {
+      zip.file(`WAD/${entry.name}`, createReadStream(absPath))
+      wadCount++
+    } else if (await isWadFileBySignature(absPath)) {
+      zip.file(`WAD/${ensureWadClientName(entry.name)}`, createReadStream(absPath))
+      wadCount++
+    }
+  }
+  if (wadCount === 0) {
+    throw new Error('no .wad content found under WAD/')
+  }
+
+  const rawDirName = dirNames.get('raw')
+  if (rawDirName) {
+    await addDirToZip(zip, path.join(root, rawDirName), 'RAW')
+  }
+
+  await writeZipToFile(zip, outFile)
+}
+
+type ZipModCheck = { status: 'valid' | 'repairable' } | { status: 'invalid'; reason: string }
+
+async function inspectFantomeZip(zipPath: string): Promise<ZipModCheck> {
+  let zip: StreamZip.StreamZipAsync | null = null
+  try {
+    zip = new StreamZip.async({ file: zipPath })
+    const entries = Object.values(await zip.entries())
+    const fileNames = entries.filter((e) => !e.isDirectory).map((e) => e.name.replace(/\\/g, '/'))
+    if (fileNames.length === 0) return { status: 'invalid', reason: 'archive is empty' }
+
+    const prefixes = ['']
+    const topSegments = new Set(fileNames.map((n) => n.split('/')[0]))
+    if (topSegments.size === 1 && fileNames.every((n) => n.includes('/'))) {
+      prefixes.push(`${[...topSegments][0]}/`)
+    }
+
+    for (const prefix of prefixes) {
+      const infoEntry = fileNames.find(
+        (n) => n.toLowerCase() === `${prefix.toLowerCase()}meta/info.json`
+      )
+      // Accept both layouts the sidecar supports: a packed wad FILE directly
+      // under WAD/ (parts.length === 2), and a loose tree where the wad name
+      // is a DIRECTORY containing override files (our bins-only generated
+      // format: WAD/<name>.wad.client/data/.../skin0.bin). The wad-name is the
+      // first path segment after WAD/ in both cases.
+      const wadFiles = fileNames.filter((n) => {
+        if (!n.toLowerCase().startsWith(`${prefix.toLowerCase()}wad/`)) return false
+        const rel = n.slice(prefix.length)
+        const parts = rel.split('/')
+        return parts.length >= 2 && WAD_ENTRY_REGEX.test(parts[1])
+      })
+      if (!infoEntry && wadFiles.length === 0) continue
+      if (wadFiles.length === 0) {
+        return { status: 'invalid', reason: 'no .wad files under WAD/ in archive' }
+      }
+      if (
+        prefix === '' &&
+        infoEntry === 'META/info.json' &&
+        wadFiles.every((n) => n.startsWith('WAD/'))
+      ) {
+        try {
+          const data = await zip.entryData('META/info.json')
+          const raw = JSON.parse(stripBom(data.toString('utf-8')))
+          if (hasStrictFantomeInfo(raw)) return { status: 'valid' }
+        } catch {
+          // falls through to repair
+        }
+      }
+      return { status: 'repairable' }
+    }
+    return { status: 'invalid', reason: 'no META/info.json or WAD content found in archive' }
+  } catch (error) {
+    return {
+      status: 'invalid',
+      reason: `unreadable archive: ${error instanceof Error ? error.message : error}`
+    }
+  } finally {
+    await zip?.close().catch(() => {})
+  }
+}
+
+// Returns a path guaranteed to be a sidecar-conforming fantome zip, writing a
+// normalized temp copy when needed. Throws with a reason when unfixable.
+async function prepareModForOverlay(
+  modPath: string,
+  tempDir: string,
+  index: number
+): Promise<string> {
+  const stat = await fs.stat(modPath)
+  const baseName = path
+    .basename(modPath)
+    .replace(/\.(wad\.client|wad\.mobile|wad|zip|fantome)$/i, '')
+
+  if (stat.isDirectory()) {
+    const outFile = path.join(tempDir, `${index}_${baseName}.fantome`)
+    await buildFantomeFromDirectory(modPath, outFile, baseName)
+    return outFile
+  }
+
+  if (WAD_ENTRY_REGEX.test(modPath)) {
+    const outFile = path.join(tempDir, `${index}_${baseName}.fantome`)
+    await buildFantomeFromWad(modPath, outFile, normalizeFantomeInfo(null, baseName))
+    return outFile
+  }
+
+  const check = await inspectFantomeZip(modPath)
+  if (check.status === 'valid') return modPath
+  if (check.status === 'invalid') throw new Error(check.reason)
+
+  const extractDir = path.join(tempDir, `${index}_extract`)
+  await fs.mkdir(extractDir, { recursive: true })
+  const zip = new StreamZip.async({ file: modPath })
+  try {
+    await assertZipEntriesSafe(zip, extractDir)
+    await zip.extract(null, extractDir)
+  } finally {
+    await zip.close()
+  }
+  const outFile = path.join(tempDir, `${index}_${baseName}.fantome`)
+  await buildFantomeFromDirectory(extractDir, outFile, baseName)
+  return outFile
+}
 
 export class ModToolsWrapper {
   private profilesPath: string
@@ -37,11 +339,18 @@ export class ModToolsWrapper {
   }
 
   private async forceKillStaleProcesses(): Promise<void> {
-    await new Promise<void>((resolve) => {
-      const proc = spawn('taskkill', ['/F', '/IM', 'ltk-manager.exe'])
-      proc.on('close', () => resolve())
-      proc.on('error', () => resolve())
-    })
+    // Includes legacy sidecar names so upgrades from old versions are covered.
+    const staleNames = ['ltk-manager.exe', 'mod-tools.exe', 'bocchi-overlay.exe']
+    await Promise.all(
+      staleNames.map(
+        (name) =>
+          new Promise<void>((resolve) => {
+            const proc = spawn('taskkill', ['/F', '/IM', name])
+            proc.on('close', () => resolve())
+            proc.on('error', () => resolve())
+          })
+      )
+    )
   }
 
   async checkDllExist(): Promise<boolean> {
@@ -189,14 +498,31 @@ export class ModToolsWrapper {
   }
 
   async applyPreset(preset: any): Promise<{ success: boolean; message: string }> {
+    if (this.applyInProgress) {
+      return { success: false, message: 'An apply operation is already in progress' }
+    }
+
+    // Stop the previous patcher before resetting flags so its cancel
+    // side-effects don't clobber this run.
+    await this.stopOverlay()
+
     this.isCancelled = false
     this.applyInProgress = true
     this.importedMods = []
     this.eolNotified = false
     this.recentStderr = []
 
+    // Normalized temp copies of non-conforming mods live here for this apply.
+    const normalizeRoot = path.join(
+      app.getPath('temp'),
+      'bocchi-normalized-mods',
+      `apply_${Date.now()}`
+    )
+    const cleanupNormalizedMods = (): void => {
+      fs.rm(normalizeRoot, { recursive: true, force: true }).catch(() => {})
+    }
+
     try {
-      await this.stopOverlay()
       await this.openPatcherLog()
       this.logToFile(`[APPLY] start: ${(preset.selectedSkins || []).length} skin(s)`)
 
@@ -216,7 +542,7 @@ export class ModToolsWrapper {
 
       const validSkinMods = preset.selectedSkins || []
       if (!Array.isArray(validSkinMods) || validSkinMods.length === 0) {
-        return { success: false, message: 'No skins selected' }
+        throw new Error('No skins selected')
       }
 
       const profileName = `preset_${preset.id}`
@@ -255,6 +581,30 @@ export class ModToolsWrapper {
       }
       console.info(`[ModToolsWrapper] Overlay inputs: ${fantomePaths.length} fantome(s)`)
 
+      // Validate/normalize every mod into a sidecar-conforming fantome — one
+      // bad mod must not abort the whole apply.
+      const skippedMods: { name: string; reason: string }[] = []
+      const readyPaths: string[] = []
+      for (let i = 0; i < fantomePaths.length; i++) {
+        if (this.isCancelled) {
+          throw new Error('Operation cancelled by user')
+        }
+        const modPath = fantomePaths[i]
+        try {
+          readyPaths.push(await prepareModForOverlay(modPath, normalizeRoot, i))
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error)
+          console.error(`[ModToolsWrapper] Skipping invalid mod ${modPath}: ${reason}`)
+          this.logToFile(`[APPLY] skipping invalid mod ${modPath}: ${reason}`)
+          skippedMods.push({ name: path.basename(modPath), reason })
+        }
+      }
+      if (readyPaths.length === 0) {
+        throw new Error(
+          `No valid mods to apply: ${skippedMods.map((m) => `${m.name} (${m.reason})`).join('; ')}`
+        )
+      }
+
       const mkoverlayArgs = [
         'mkoverlay',
         '--game',
@@ -263,7 +613,7 @@ export class ModToolsWrapper {
         path.normalize(profilePath),
         '--state',
         path.normalize(overlayStateDir),
-        ...fantomePaths.flatMap((p) => ['--mod', p])
+        ...readyPaths.flatMap((p) => ['--mod', p])
       ]
       console.debug('[ModToolsWrapper] Executing bocchi-overlay mkoverlay')
       await this.execToolWithTimeout(overlayBinForBuild, mkoverlayArgs, this.timeout, true)
@@ -297,10 +647,13 @@ export class ModToolsWrapper {
 
       console.info('[ModToolsWrapper] Starting patcher via ltk-manager sidecar')
       this.logToFile('[APPLY] overlay built, starting patcher')
+      if (this.isCancelled) {
+        throw new Error('Operation cancelled by user')
+      }
       // Reset here (not at apply start) so the exit event of the previous
       // patcher — killed by stopOverlay above — is still treated as intentional.
       this.stopRequested = false
-      this.runningProcess = spawn(
+      const patcherProcess = spawn(
         sidecarBin,
         [
           'patcher',
@@ -313,9 +666,10 @@ export class ModToolsWrapper {
         ],
         { detached: false, stdio: ['pipe', 'pipe', 'pipe'] }
       )
-      this.activeProcesses.push(this.runningProcess)
+      this.runningProcess = patcherProcess
+      this.activeProcesses.push(patcherProcess)
 
-      this.runningProcess.stdout?.on('data', (data) => {
+      patcherProcess.stdout?.on('data', (data) => {
         const output = data.toString()
         const lines = output.split('\n').filter((line) => line.trim())
 
@@ -333,7 +687,7 @@ export class ModToolsWrapper {
         })
       })
 
-      this.runningProcess.stderr?.on('data', (data) => {
+      patcherProcess.stderr?.on('data', (data) => {
         const output = data.toString()
         const lines = output.split('\n').filter((line) => line.trim())
 
@@ -352,11 +706,14 @@ export class ModToolsWrapper {
         })
       })
 
-      this.runningProcess.on('exit', (code) => {
+      patcherProcess.on('exit', (code) => {
         console.log(`Mod tools process exited with code ${code}`)
+        this.cleanupProcess(patcherProcess)
+        cleanupNormalizedMods()
+        // A late exit from a superseded patcher must not touch current state.
+        if (this.runningProcess !== patcherProcess) return
         this.logToFile(`[APPLY] patcher exited with code ${code}`)
         this.closePatcherLog()
-        this.cleanupProcess(this.runningProcess)
         this.runningProcess = null
 
         // An exit nobody asked for means injection died (crash, Vanguard kill,
@@ -372,12 +729,18 @@ export class ModToolsWrapper {
       })
 
       this.applyInProgress = false
-      return { success: true, message: 'Preset applied successfully' }
+      let message = 'Preset applied successfully'
+      if (skippedMods.length > 0) {
+        const details = skippedMods.map((m) => `${m.name} (${m.reason})`).join(', ')
+        message += `. Skipped ${skippedMods.length} invalid mod(s): ${details}`
+      }
+      return { success: true, message }
     } catch (error) {
       console.error('Failed to apply preset:', error)
       this.logToFile(`[APPLY] failed: ${error instanceof Error ? error.message : error}`)
       this.closePatcherLog()
       this.applyInProgress = false
+      cleanupNormalizedMods()
 
       // Send cancellation status to renderer if cancelled
       if (this.isCancelled && this.mainWindow && !this.mainWindow.isDestroyed()) {
@@ -457,6 +820,14 @@ export class ModToolsWrapper {
 
   async stopOverlay(): Promise<void> {
     this.stopRequested = true
+    // Abort an in-flight overlay build too — the cancellation checkpoints in
+    // applyPreset read isCancelled, not stopRequested.
+    if (this.applyInProgress) {
+      this.isCancelled = true
+      if (this.currentOperation && !this.currentOperation.killed) {
+        this.currentOperation.kill()
+      }
+    }
     if (this.runningProcess) {
       this.runningProcess.stdin?.write('\n')
       await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -464,6 +835,8 @@ export class ModToolsWrapper {
         this.runningProcess.kill()
       }
       this.runningProcess = null
+      this.closePatcherLog()
+      this.sendToRenderer('patcher-status', '')
     }
     await this.forceKillStaleProcesses()
   }

@@ -7,7 +7,13 @@ import { WADParser, WADChunk } from './wadParser'
 import { TextureExtractor } from './textureExtractor'
 import { ImageConverter } from './imageConverter'
 import { SettingsService } from './settingsService'
-import { ModToolsWrapper } from './modToolsWrapper'
+import {
+  ModToolsWrapper,
+  assertZipEntriesSafe,
+  buildFantomeFromDirectory,
+  buildFantomeFromWad,
+  normalizeFantomeInfo
+} from './modToolsWrapper'
 
 export interface ImportResult {
   success: boolean
@@ -267,10 +273,10 @@ export class FileImportService {
 
       await this.moveFile(tempExtractPath, finalPath)
 
-      // Copy the original .wad file to mod-files directory
-      const modFileName = `${modFolderName}.wad`
+      // Wrap the WAD into a sidecar-conforming fantome zip in mod-files
+      const modFileName = `${modFolderName}.zip`
       const modFilePath = path.join(this.modFilesDir, modFileName)
-      await fs.copyFile(wadPath, modFilePath)
+      await buildFantomeFromWad(wadPath, modFilePath, infoJson)
 
       const skinInfo: SkinInfo = {
         championName: championName || 'Custom',
@@ -297,52 +303,52 @@ export class FileImportService {
       // Use StreamZip for extraction to handle large files
       const zip = new StreamZip.async({ file: zipPath })
       try {
+        await assertZipEntriesSafe(zip, tempExtractPath)
         await zip.extract(null, tempExtractPath)
       } finally {
         await zip.close()
       }
 
-      const metaInfoPath = path.join(tempExtractPath, 'META', 'info.json')
-      let info: any
+      // Hoist single-wrapper layouts (SomeMod/META, SomeMod/WAD) to the root
+      await this.hoistWrapperDirectory(tempExtractPath)
 
-      // Try to read existing info.json, or create one if missing/malformed
+      const metaInfoPath = path.join(tempExtractPath, 'META', 'info.json')
+      let rawInfo: any = null
+
       try {
         if (await this.fileExists(metaInfoPath)) {
           const infoContent = await fs.readFile(metaInfoPath, 'utf-8')
-          info = JSON.parse(infoContent)
-        } else {
-          // No info.json found, create from scratch
-          info = null
+          rawInfo = JSON.parse(
+            infoContent.charCodeAt(0) === 0xfeff ? infoContent.slice(1) : infoContent
+          )
         }
       } catch (error) {
-        // Malformed JSON or read error, create from scratch
         console.warn(
           `Failed to parse META/info.json: ${error instanceof Error ? error.message : 'Unknown error'}. Creating new metadata.`
         )
-        info = null
+        rawInfo = null
       }
 
-      // Create info.json from scratch if it doesn't exist or was malformed
-      if (!info) {
-        const metaDir = path.join(tempExtractPath, 'META')
-        await fs.mkdir(metaDir, { recursive: true })
+      // Normalize to the exact-case fields the overlay sidecar requires
+      const metaDir = path.join(tempExtractPath, 'META')
+      await fs.mkdir(metaDir, { recursive: true })
 
-        info = {
+      const fallbackName = options.skinName || fileName
+      const normalizedInfo = normalizeFantomeInfo(
+        rawInfo ?? {
           Author: options.author || 'User Import',
           Description: `Imported from ${path.basename(zipPath)}`,
-          Name: options.skinName || fileName,
+          Name: fallbackName,
           Version: '1.0.0'
-        }
-
-        await fs.writeFile(metaInfoPath, JSON.stringify(info, null, 2))
-      } else {
-        // Update author if provided in options
-        if (options.author) {
-          info.Author = options.author
-          // Write back the updated info
-          await fs.writeFile(metaInfoPath, JSON.stringify(info, null, 2))
-        }
-      }
+        },
+        fallbackName
+      )
+      if (options.author) normalizedInfo.Author = options.author
+      const championField = rawInfo?.Champion || rawInfo?.champion
+      const info: any = championField
+        ? { ...normalizedInfo, Champion: championField }
+        : { ...normalizedInfo }
+      await fs.writeFile(metaInfoPath, JSON.stringify(info, null, 2))
 
       // Handle custom image if provided
       if (options.imagePath) {
@@ -392,11 +398,19 @@ export class FileImportService {
 
       await this.moveFile(tempExtractPath, finalPath)
 
-      // Copy the original mod file to mod-files directory
-      const ext = path.extname(zipPath)
+      // Build a normalized, sidecar-conforming archive in mod-files
+      const sourceExt = path.extname(zipPath).toLowerCase()
+      const ext = sourceExt === '.fantome' ? '.fantome' : '.zip'
       const modFileName = `${modFolderName}${ext}`
       const modFilePath = path.join(this.modFilesDir, modFileName)
-      await fs.copyFile(zipPath, modFilePath)
+      try {
+        await buildFantomeFromDirectory(finalPath, modFilePath, skinName)
+      } catch (buildError) {
+        await fs.rm(finalPath, { recursive: true, force: true }).catch(() => {})
+        throw new Error(
+          `Mod archive has no usable WAD content: ${buildError instanceof Error ? buildError.message : buildError}`
+        )
+      }
 
       const skinInfo: SkinInfo = {
         championName: championName || 'Custom',
@@ -411,6 +425,20 @@ export class FileImportService {
       await this.cleanupTemp(tempExtractPath)
       throw error
     }
+  }
+
+  private async hoistWrapperDirectory(extractDir: string): Promise<void> {
+    const entries = await fs.readdir(extractDir, { withFileTypes: true })
+    if (entries.some((e) => e.isDirectory() && /^(meta|wad)$/i.test(e.name))) return
+    const dirs = entries.filter((e) => e.isDirectory())
+    if (dirs.length !== 1) return
+    const inner = path.join(extractDir, dirs[0].name)
+    const innerEntries = await fs.readdir(inner, { withFileTypes: true })
+    if (!innerEntries.some((e) => e.isDirectory() && /^(meta|wad)$/i.test(e.name))) return
+    for (const entry of innerEntries) {
+      await this.moveFile(path.join(inner, entry.name), path.join(extractDir, entry.name))
+    }
+    await fs.rm(inner, { recursive: true, force: true }).catch(() => {})
   }
 
   private extractChampionFromMod(info: any, fileName: string): string {

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { showUpdateDialogAtom, appVersionAtom } from '../store/atoms/game.atoms'
 import { isCheckingForUpdatesAtom } from '../store/atoms/ui.atoms'
 import { Button } from './ui/button'
+import { confirmDialog } from './ConfirmHost'
 import {
   autoAcceptEnabledAtom,
   autoRandomFavoriteSkinEnabledAtom,
@@ -546,7 +547,7 @@ export function SettingsDialog({
   }
 
   const handleClearCache = async () => {
-    if (!confirm(t('settings.cacheManagement.confirmClear'))) {
+    if (!(await confirmDialog(t('settings.cacheManagement.confirmClear')))) {
       return
     }
 

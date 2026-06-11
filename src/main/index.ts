@@ -12,7 +12,7 @@ import { initMainLogger } from './logger'
 // fired during module-time evaluation are captured too.
 initMainLogger()
 import { SkinDownloader } from './services/skinDownloader'
-import { ModToolsWrapper } from './services/modToolsWrapper'
+import { ModToolsWrapper, assertZipEntriesSafe } from './services/modToolsWrapper'
 import { championDataService } from './services/championDataService'
 import { FavoritesService } from './services/favoritesService'
 import { ToolsDownloader } from './services/toolsDownloader'
@@ -34,10 +34,13 @@ import { autoBanPickService } from './services/autoBanPickService'
 import { multiRitoFixesService } from './services/multiRitoFixesService'
 import { skinMigrationService } from './services/skinMigrationService'
 import { repositoryService } from './services/repositoryService'
+import { resolveFormImages } from './services/formImageCache'
+import { getLocalFormImages } from './services/formPreviewResources'
 import { GamePathService } from './services/gamePathService'
 import { LOCAL_FANTOME_ONLY_MODE } from '../shared/constants/features'
 import {
   generateFantomes as generateLocalFantomes,
+  listSkinForms,
   type GenerationRequest as LocalFantomeRequest
 } from './services/fantonizeSidecar'
 import { getPetNamesForChampion } from './services/championPets'
@@ -1042,12 +1045,11 @@ function setupIpcHandlers(): void {
         )
         .map((result) => result.value)
 
-      const failedSkins = skinInfosToProcess
-        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-        .map((result, index) => ({
-          skin: filteredSkins[index],
-          error: result.reason?.message || result.reason
-        }))
+      const failedSkins = skinInfosToProcess.flatMap((result, index) =>
+        result.status === 'rejected'
+          ? [{ skin: filteredSkins[index], error: result.reason?.message || result.reason }]
+          : []
+      )
 
       if (failedSkins.length > 0) {
         failedSkins.forEach(({ skin, error }) => {
@@ -1160,21 +1162,10 @@ function setupIpcHandlers(): void {
         // Build a map for skinKey → SelectedSkin for context lookup
         const skinContextMap = new Map<string, SelectedSkin>()
 
-        for (const skin of filteredSkins) {
-          if (skin.championId) {
-            championIdMap.set(skin.championKey, skin.championId)
-          }
-          // Store the full context for each skin (build early for context lookup)
-          const skinNameToUse = sanitizeSkinNameForPath(skin.skinNameEn || skin.skinName)
-          const skinNameWithChroma = skin.chromaId
-            ? `${skinNameToUse} ${skin.chromaId}.zip`
-            : `${skinNameToUse}.zip`
-          const preliminarySkinKey = `${skin.championKey}/${skinNameWithChroma}`
-          skinContextMap.set(preliminarySkinKey, skin)
-        }
-
-        // Convert to the format expected by run-patcher
-        const skinKeys = filteredSkins.map((skin) => {
+        // Context keys must match the skinKeys below exactly — custom mods use
+        // their mod-file form so the context lookup routes them through the
+        // custom branch (mirrors run-patcher).
+        const buildSmartApplySkinKey = (skin: SelectedSkin): string => {
           // Handle custom mods without champion (old format)
           if (skin.championKey === 'Custom') {
             return `Custom/[User] ${skin.skinName}`
@@ -1191,12 +1182,23 @@ function setupIpcHandlers(): void {
           // Regular skins from repository
           // For chromas, append the chroma ID
           // Use proper name priority for downloading from repository: nameEn -> name
+          // Non-chroma honors downloadedFilename (variant forms) like run-patcher
           const skinNameToUse = sanitizeSkinNameForPath(skin.skinNameEn || skin.skinName)
           const skinNameWithChroma = skin.chromaId
             ? `${skinNameToUse} ${skin.chromaId}.zip`
-            : `${skinNameToUse}.zip`
+            : skin.downloadedFilename || `${skinNameToUse}.zip`
           return `${skin.championKey}/${skinNameWithChroma}`
-        })
+        }
+
+        for (const skin of filteredSkins) {
+          if (skin.championId) {
+            championIdMap.set(skin.championKey, skin.championId)
+          }
+          skinContextMap.set(buildSmartApplySkinKey(skin), skin)
+        }
+
+        // Convert to the format expected by run-patcher
+        const skinKeys = filteredSkins.map(buildSmartApplySkinKey)
 
         // Reuse the run-patcher logic directly
         // First validate for single skin per champion
@@ -1341,12 +1343,11 @@ function setupIpcHandlers(): void {
           )
           .map((result) => result.value)
 
-        const failedSkins = skinInfosToProcess
-          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-          .map((result, index) => ({
-            skin: skinKeys[index],
-            error: result.reason?.message || result.reason
-          }))
+        const failedSkins = skinInfosToProcess.flatMap((result, index) =>
+          result.status === 'rejected'
+            ? [{ skin: skinKeys[index], error: result.reason?.message || result.reason }]
+            : []
+        )
 
         if (failedSkins.length > 0) {
           failedSkins.forEach(({ skin, error }) => {
@@ -1614,7 +1615,13 @@ function setupIpcHandlers(): void {
 
   // Tools management
   ipcMain.handle('check-tools-exist', async () => {
-    return await toolsDownloader.checkToolsExist()
+    // Renderer expects a bare boolean; treat errors as "tools missing"
+    try {
+      return await toolsDownloader.checkToolsExist()
+    } catch (error) {
+      console.error('check-tools-exist failed:', error)
+      return false
+    }
   })
 
   ipcMain.handle('check-dll-exist', async () => {
@@ -1778,6 +1785,11 @@ function setupIpcHandlers(): void {
         /** Riot chromaId, appended to the on-disk name as `{name} {label}.fantome`
          *  so bocchi's existing patcher lookup finds it. Required iff chromaIndex set. */
         chromaIdLabel?: string
+        /** Exalted form to bake (gear position; 0 = default form). */
+        formIndex?: number
+        /** Label appended to the on-disk name as `{name} {label}.fantome`
+         *  (e.g. "Form 2") so each form coexists. Required iff formIndex > 0. */
+        formLabel?: string
       }
     ) => {
       try {
@@ -1821,6 +1833,13 @@ function setupIpcHandlers(): void {
         let targetSkinNum = args.skinNum
         let fileLabel = `${args.championKey}_${cleanSkinName}`
         let displayName = cleanSkinName
+        // Exalted form: bake the chosen gear, name it `{name} {Form N}.fantome`
+        // so each form coexists like a chroma. Form 0 is the default skin.
+        const gearIndex = typeof args.formIndex === 'number' ? args.formIndex : undefined
+        if (gearIndex && gearIndex > 0 && args.formLabel) {
+          fileLabel = `${args.championKey}_${cleanSkinName} ${args.formLabel}`
+          displayName = `${cleanSkinName} ${args.formLabel}`
+        }
         if (typeof args.chromaIndex === 'number' && args.chromaIdLabel) {
           const allWadSkins = await listSkinsForChampion(wadPath)
           const chromasOfBase = allWadSkins
@@ -1847,7 +1866,11 @@ function setupIpcHandlers(): void {
               {
                 skinNumber: targetSkinNum,
                 fileLabel,
-                displayName
+                displayName,
+                parentSkinNumber: targetSkinNum !== args.skinNum ? args.skinNum : undefined,
+                // Bake the chosen exalted form. Without this the sidecar emits
+                // the base skin and the in-game form never changes.
+                gearIndex: gearIndex && gearIndex > 0 ? gearIndex : undefined
               }
             ],
             outputDir: modFilesDir,
@@ -1869,6 +1892,66 @@ function setupIpcHandlers(): void {
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      }
+    }
+  )
+
+  // Enumerate exalted in-game forms for a skin from the local WAD. Returns an
+  // empty list for ordinary skins, so the UI shows no form picker.
+  ipcMain.handle(
+    'local-fantome:list-forms',
+    async (_, args: { championKey: string; skinNum: number; leagueDir?: string }) => {
+      try {
+        const fantomeDirSetting = (settingsService.get('localFantomeLeagueDir') as string) || ''
+        const gamePathSetting = (settingsService.get('gamePath') as string) || ''
+        const fromGamePath = gamePathSetting ? path.dirname(gamePathSetting) : ''
+        const leagueDir =
+          args.leagueDir || fantomeDirSetting || fromGamePath || 'C:/Riot Games/League of Legends'
+        const wadPath = path.join(
+          leagueDir,
+          'Game',
+          'DATA',
+          'FINAL',
+          'Champions',
+          `${args.championKey}.wad.client`
+        )
+        const forms = await listSkinForms({
+          wadPath,
+          champion: args.championKey,
+          skinNumber: args.skinNum
+        })
+        return { success: true, forms }
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          forms: []
+        }
+      }
+    }
+  )
+
+  // Resolve per-form preview images for an exalted skin (gearIndex→image map).
+  // Locally bundled gear portrait icons map exactly to gearIndex and win; gears
+  // with no bundled icon (e.g. Viego) fall back to the repo's per-form preview
+  // images. Best-effort: missing ids / network errors yield {}.
+  ipcMain.handle(
+    'form-preview:get-urls',
+    async (_, args: { championKey: string; championId: number; skinNum: number }) => {
+      try {
+        const local = await getLocalFormImages(args.championId, args.skinNum)
+        await repositoryService.ensureSkinIds()
+        const remote = await resolveFormImages(
+          repositoryService.getFormPreviewUrls(args.championId, args.skinNum)
+        )
+        const urls = { ...remote, ...local }
+        return { success: true, urls }
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          urls: {}
         }
       }
     }
@@ -2000,7 +2083,12 @@ function setupIpcHandlers(): void {
   })
 
   ipcMain.handle('quit-and-install', () => {
-    updaterService.quitAndInstall()
+    try {
+      updaterService.quitAndInstall()
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
   })
 
   ipcMain.handle('cancel-update', () => {
@@ -2323,7 +2411,8 @@ function setupIpcHandlers(): void {
       const tempDir = path.join(app.getPath('userData'), 'temp-transfers')
       await fs.promises.mkdir(tempDir, { recursive: true })
 
-      const tempPath = path.join(tempDir, `${Date.now()}_${fileName}`)
+      // fileName is peer-supplied; never let it carry path segments
+      const tempPath = path.join(tempDir, `${Date.now()}_${path.basename(fileName)}`)
       return { success: true, path: tempPath }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
@@ -2487,6 +2576,7 @@ function setupIpcHandlers(): void {
 
           try {
             sendStatus('Extracting files from archive...')
+            await assertZipEntriesSafe(zip, tempDir)
             await zip.extract(null, tempDir)
 
             // Look for WAD files in the extracted content
@@ -2681,10 +2771,14 @@ function setupIpcHandlers(): void {
       teamChampionIds: number[],
       autoSyncedSkins?: SelectedSkin[]
     ) => {
-      // Combine selected skins and auto-synced skins
-      const allSkins = [...selectedSkins, ...(autoSyncedSkins || [])]
-      const summary = await skinApplyService.getSmartApplySummary(allSkins, teamChampionIds)
-      return { success: true, summary }
+      try {
+        // Combine selected skins and auto-synced skins
+        const allSkins = [...selectedSkins, ...(autoSyncedSkins || [])]
+        const summary = await skinApplyService.getSmartApplySummary(allSkins, teamChampionIds)
+        return { success: true, summary }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+      }
     }
   )
 

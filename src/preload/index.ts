@@ -27,22 +27,6 @@ const api = {
   deleteSkin: (championName: string, skinName: string) =>
     ipcRenderer.invoke('delete-skin', championName, skinName),
 
-  // Batch download management
-  downloadAllSkins: (
-    skinUrls: string[],
-    options?: { excludeChromas?: boolean; concurrency?: number }
-  ) => ipcRenderer.invoke('download-all-skins', skinUrls, options),
-  pauseBatchDownload: () => ipcRenderer.invoke('pause-batch-download'),
-  resumeBatchDownload: () => ipcRenderer.invoke('resume-batch-download'),
-  cancelBatchDownload: () => ipcRenderer.invoke('cancel-batch-download'),
-  getBatchDownloadState: () => ipcRenderer.invoke('get-batch-download-state'),
-  onDownloadAllSkinsProgress: (callback: (progress: DownloadProgress) => void) => {
-    const handler = (_: IpcRendererEvent, progress: DownloadProgress) => callback(progress)
-    ipcRenderer.on('download-all-skins-progress', handler)
-    return () => ipcRenderer.removeListener('download-all-skins-progress', handler)
-  },
-  retryFailedDownloads: () => ipcRenderer.invoke('retry-failed-downloads'),
-
   // Bulk download from repository
   downloadAllSkinsBulk: (options: {
     excludeChromas: boolean
@@ -118,7 +102,6 @@ const api = {
   loadChampionData: (language?: string) => ipcRenderer.invoke('load-champion-data', language),
   checkChampionUpdates: (language?: string) =>
     ipcRenderer.invoke('check-champion-updates', language),
-  getChromasForSkin: (skinId: string) => ipcRenderer.invoke('get-chromas-for-skin', skinId),
 
   // Favorites
   addFavorite: (
@@ -195,7 +178,13 @@ const api = {
     leagueDir?: string
     chromaIndex?: number
     chromaIdLabel?: string
+    formIndex?: number
+    formLabel?: string
   }) => ipcRenderer.invoke('local-fantome:generate-for-skin', args),
+  localFantomeListForms: (args: { championKey: string; skinNum: number; leagueDir?: string }) =>
+    ipcRenderer.invoke('local-fantome:list-forms', args),
+  getFormPreviewUrls: (args: { championKey: string; championId: number; skinNum: number }) =>
+    ipcRenderer.invoke('form-preview:get-urls', args),
   localFantomeHashtableStatus: () => ipcRenderer.invoke('local-fantome:hashtable-status'),
   localFantomeHashtableDownload: () => ipcRenderer.invoke('local-fantome:hashtable-download'),
   onLocalFantomeProgress: (

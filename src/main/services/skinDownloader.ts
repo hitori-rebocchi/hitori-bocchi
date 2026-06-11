@@ -85,6 +85,11 @@ export class SkinDownloader {
   }
 
   async downloadSkin(url: string): Promise<SkinInfo> {
+    // ID-based fantome URLs resolve names through skin_ids.json
+    if (/\.fantome$/i.test(url)) {
+      await repositoryService.ensureSkinIds()
+    }
+
     // Parse GitHub URL to extract champion and skin name
     const skinInfo = this.parseGitHubUrl(url)
 
@@ -230,6 +235,37 @@ export class SkinDownloader {
         skinName: chromaFileName, // Use the full chroma filename (e.g., "DRX Aatrox 266032.zip")
         url,
         source: 'repository' as const
+      }
+    }
+
+    // ID-based fantome patterns (current LeagueSkins layout). Forms/chromas
+    // nest one level under the parent skin id; the base skin sits beside it.
+    //   skins/{champId}/{skinId}/{skinId}.fantome
+    //   skins/{champId}/{skinId}/{childId}/{childId}.fantome
+    const idFantomeMatch = relativePath.match(/^(\d+)\/(\d+)(?:\/(\d+))?\/(\d+)\.fantome$/)
+    if (idFantomeMatch && idFantomeMatch[4] === (idFantomeMatch[3] || idFantomeMatch[2])) {
+      const championId = parseInt(idFantomeMatch[1], 10)
+      const fileId = idFantomeMatch[4]
+
+      // Use the locale-independent alias as champion folder so renderer
+      // lookups (which compare against champion.key) match.
+      const champion = championDataService.getChampionByIdAnyLanguageSync(championId)
+      const championName = champion?.key || `Champion_${championId}`
+
+      // skin_ids.json carries the canonical English name for both base skins
+      // and "(Form N)" entries
+      const idName = repositoryService.getSkinNameById(fileId)
+      const skinName = idName ? `${sanitizeSkinNameForPath(idName)}.zip` : `${fileId}.zip`
+
+      return {
+        championName,
+        skinName,
+        url,
+        source: 'repository' as const,
+        metadata: {
+          championId,
+          skinId: idFantomeMatch[2]
+        } as any
       }
     }
 

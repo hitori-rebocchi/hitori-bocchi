@@ -26,44 +26,6 @@ export interface IApi {
     skinName: string
   ) => Promise<{ success: boolean; error?: string }>
 
-  // Batch download management
-  downloadAllSkins: (
-    skinUrls: string[],
-    options?: { excludeChromas?: boolean; concurrency?: number }
-  ) => Promise<{ success: boolean; error?: string }>
-  pauseBatchDownload: () => Promise<{ success: boolean; error?: string }>
-  resumeBatchDownload: () => Promise<{ success: boolean; error?: string }>
-  cancelBatchDownload: () => Promise<{ success: boolean; error?: string }>
-  getBatchDownloadState: () => Promise<{
-    success: boolean
-    data?: {
-      totalSkins: number
-      completedSkins: number
-      currentSkin: string | null
-      currentProgress: number
-      downloadSpeed: number
-      timeRemaining: number
-      failedSkins: string[]
-      isRunning: boolean
-      isPaused: boolean
-    } | null
-    error?: string
-  }>
-  onDownloadAllSkinsProgress: (
-    callback: (progress: {
-      totalSkins: number
-      completedSkins: number
-      currentSkin: string | null
-      currentProgress: number
-      downloadSpeed: number
-      timeRemaining: number
-      failedSkins: string[]
-      isRunning: boolean
-      isPaused: boolean
-    }) => void
-  ) => () => void
-  retryFailedDownloads: () => Promise<{ success: boolean; error?: string }>
-
   // Bulk download from repository
   downloadAllSkinsBulk: (options: {
     excludeChromas: boolean
@@ -292,7 +254,27 @@ export interface IApi {
     leagueDir?: string
     chromaIndex?: number
     chromaIdLabel?: string
+    formIndex?: number
+    formLabel?: string
   }) => Promise<{ success: boolean; localPath?: string; error?: string }>
+  localFantomeListForms: (args: {
+    championKey: string
+    skinNum: number
+    leagueDir?: string
+  }) => Promise<{
+    success: boolean
+    forms: Array<{ index: number; label: string }>
+    error?: string
+  }>
+  getFormPreviewUrls: (args: {
+    championKey: string
+    championId: number
+    skinNum: number
+  }) => Promise<{
+    success: boolean
+    urls: Record<number, string>
+    error?: string
+  }>
   localFantomeHashtableStatus: () => Promise<{
     success: boolean
     exists: boolean

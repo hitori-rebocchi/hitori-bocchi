@@ -501,9 +501,17 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
       return true
     }
 
-    // Use stored filename if available
+    // Use stored filename if available. The on-disk file for a locally-
+    // generated form is `[User] {base} {Form N}.fantome`, so match that shape
+    // — not just the raw pinned `.zip` name (which never equals the disk name).
     if (skin.downloadedFilename) {
-      return downloadedSkins.some((ds) => ds.skinName === skin.downloadedFilename)
+      const baseFromFile = skin.downloadedFilename.replace(/\.(zip|fantome|wad\.client|wad)$/i, '')
+      const exts = ['fantome', 'zip', 'wad', 'wad.client']
+      const names = new Set<string>([skin.downloadedFilename])
+      for (const ext of exts) names.add(`[User] ${baseFromFile}.${ext}`)
+      return downloadedSkins.some(
+        (ds) => ds.championName === skin.championKey && names.has(ds.skinName)
+      )
     }
 
     // The on-disk filename for a locally-generated fantome is
@@ -534,12 +542,10 @@ export const SelectedSkinsDrawer: React.FC<SelectedSkinsDrawerProps> = ({
     const actualSkinData = findActualSkinData(skin)
 
     if (actualSkinData && skin.variantId && actualSkinData.variants) {
-      // Handle variant skins
+      // Variant fantomes are stored as "{sanitized form display name}.zip"
       const variant = actualSkinData.variants.items.find((v) => v.id === skin.variantId)
-      if (variant && (variant.downloadUrl || variant.githubUrl)) {
-        const url = variant.downloadUrl || variant.githubUrl
-        const urlParts = url.split('/')
-        return decodeURIComponent(urlParts[urlParts.length - 1])
+      if (variant) {
+        return `${sanitizeSkinNameForPath(variant.displayName || variant.name)}.zip`
       }
     }
 

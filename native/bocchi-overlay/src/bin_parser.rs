@@ -181,6 +181,10 @@ pub struct BinEntry {
     pub type_hash: u32,
     pub key_hash: u32,
     pub fields: Vec<(u32, BinValue)>,
+    /// Entry body preserved verbatim when it contains types this parser does
+    /// not know (future Riot additions). `fields` is empty; serialize writes
+    /// the blob back byte-identically. Blob entries cannot be edited/re-keyed.
+    pub raw: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone)]
@@ -322,32 +326,60 @@ pub fn parse_bin(data: &[u8]) -> Result<BinFile> {
         type_hashes.push(cur.read_u32::<LittleEndian>()?);
     }
     for i in 0..ec {
-        let elen = cur.read_u32::<LittleEndian>()? as u64;
-        let end = cur.position() + elen;
-        let key = cur.read_u32::<LittleEndian>()?;
-        let fc = cur.read_u16::<LittleEndian>()? as usize;
-        let mut fields = Vec::with_capacity(fc);
-        for _ in 0..fc {
-            let fname = cur.read_u32::<LittleEndian>()?;
-            let ft = BinType::decode(cur.read_u8()?)?;
-            fields.push((fname, read_value(&mut cur, ft)?));
+        let elen = cur.read_u32::<LittleEndian>()? as usize;
+        let start = cur.position() as usize;
+        let end = start
+            .checked_add(elen)
+            .ok_or_else(|| anyhow!("Entry {} length overflow", i))?;
+        if end > data.len() {
+            bail!("Entry {} length {} exceeds file size", i, elen);
         }
-        if cur.position() != end {
-            bail!(
-                "Entry size mismatch (entry {}): expected end {}, got {}",
-                i,
-                end,
-                cur.position()
-            );
-        }
-        bf.entries.push(BinEntry {
-            type_hash: type_hashes[i],
-            key_hash: key,
-            fields,
-        });
+        let body = &data[start..end];
+        let entry = match parse_entry_body(body) {
+            Ok((key, fields)) => BinEntry {
+                type_hash: type_hashes[i],
+                key_hash: key,
+                fields,
+                raw: None,
+            },
+            // Entry boundaries are length-prefixed, so an unparseable body
+            // (e.g. a future BIN type) can be carried opaquely.
+            Err(_) => BinEntry {
+                type_hash: type_hashes[i],
+                key_hash: if body.len() >= 4 {
+                    u32::from_le_bytes([body[0], body[1], body[2], body[3]])
+                } else {
+                    0
+                },
+                fields: Vec::new(),
+                raw: Some(body.to_vec()),
+            },
+        };
+        bf.entries.push(entry);
+        cur.set_position(end as u64);
     }
 
     Ok(bf)
+}
+
+fn parse_entry_body(body: &[u8]) -> Result<(u32, Vec<(u32, BinValue)>)> {
+    let mut cur = Cursor::new(body);
+    let key = cur.read_u32::<LittleEndian>()?;
+    let fc = cur.read_u16::<LittleEndian>()? as usize;
+    let mut fields = Vec::with_capacity(fc);
+    for _ in 0..fc {
+        let fname = cur.read_u32::<LittleEndian>()?;
+        let ft = BinType::decode(cur.read_u8()?)?;
+        fields.push((fname, read_value(&mut cur, ft)?));
+    }
+    if cur.position() as usize != body.len() {
+        bail!(
+            "Entry size mismatch: consumed {} of {}",
+            cur.position(),
+            body.len()
+        );
+    }
+    Ok((key, fields))
 }
 
 // ----------------------------- Sizing ---------------------------------------
@@ -495,6 +527,11 @@ pub fn serialize_bin(bf: &BinFile) -> Result<Vec<u8>> {
         out.write_u32::<LittleEndian>(e.type_hash)?;
     }
     for e in &bf.entries {
+        if let Some(raw) = &e.raw {
+            out.write_u32::<LittleEndian>(raw.len() as u32)?;
+            out.extend_from_slice(raw);
+            continue;
+        }
         let mut body: u32 = 4 + 2;
         for (_, fv) in &e.fields {
             body += 4 + 1 + value_size(fv)? as u32;
@@ -531,10 +568,13 @@ pub fn validate_roundtrip(data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Find first entry of the given type hash, or None.
+/// Find first entry of the given type hash, or None. Blob-preserved entries
+/// are skipped — callers need parsed fields.
 #[allow(dead_code)]
 pub fn find_entry(bf: &BinFile, type_hash: u32) -> Option<&BinEntry> {
-    bf.entries.iter().find(|e| e.type_hash == type_hash)
+    bf.entries
+        .iter()
+        .find(|e| e.type_hash == type_hash && e.raw.is_none())
 }
 
 /// Find a field within a POINTER/EMBEDDED-style fields list (or any (u32, BinValue) list).
@@ -691,6 +731,34 @@ mod tests {
         }
         println!("  Round-trip: {} ok, {} fail", ok, fail);
         assert_eq!(fail, 0, "some round-trips failed");
+    }
+
+    #[test]
+    fn unknown_type_entry_preserved_as_blob() {
+        // One entry whose single field uses type byte 27 (unknown).
+        let mut out: Vec<u8> = Vec::new();
+        out.extend_from_slice(b"PROP");
+        out.write_u32::<LittleEndian>(3).unwrap();
+        out.write_u32::<LittleEndian>(0).unwrap();
+        out.write_u32::<LittleEndian>(1).unwrap();
+        out.write_u32::<LittleEndian>(0xDEADBEEF).unwrap();
+        // body: key(4) + fc(2) + fname(4) + type(1) + bogus payload(3)
+        out.write_u32::<LittleEndian>(4 + 2 + 4 + 1 + 3).unwrap();
+        out.write_u32::<LittleEndian>(0xCAFEBABE).unwrap();
+        out.write_u16::<LittleEndian>(1).unwrap();
+        out.write_u32::<LittleEndian>(0x1111_2222).unwrap();
+        out.write_u8(27).unwrap();
+        out.extend_from_slice(&[1, 2, 3]);
+
+        let bf = parse_bin(&out).expect("parse with blob fallback");
+        assert_eq!(bf.entries.len(), 1);
+        assert!(bf.entries[0].raw.is_some());
+        assert_eq!(bf.entries[0].key_hash, 0xCAFEBABE);
+        assert!(bf.entries[0].fields.is_empty());
+        assert!(find_entry(&bf, 0xDEADBEEF).is_none());
+
+        let out2 = serialize_bin(&bf).expect("serialize blob");
+        assert_eq!(out, out2);
     }
 
     #[test]

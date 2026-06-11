@@ -11,7 +11,13 @@ import {
 } from '../types/repository.types'
 import { settingsService } from './settingsService'
 import { championDataService } from './championDataService'
+import type { Champion, SkinVariant } from './championFetcher'
 import { sanitizeSkinNameForPath } from '../../shared/utils/skinFilename'
+
+// skin_ids.json publishes baked exalted/ultimate forms as "<Parent Name> (Form N)".
+// The pseudo-id suffix is NOT reliable (e.g. 103087 "Immortalized Legend Ahri (Form 2)"),
+// so the name suffix is the authoritative signal.
+const FORM_NAME_PATTERN = /^(.+) \(Form (\d+)\)$/
 
 export class RepositoryService {
   private static instance: RepositoryService
@@ -120,6 +126,107 @@ export class RepositoryService {
     if (this.skinIdsMap.size === 0) {
       await this.fetchSkinIds()
     }
+  }
+
+  /**
+   * Attaches exalted/ultimate form variants to champion skins, derived from
+   * "(Form N)" entries in skin_ids.json. Repo layout (ID-based, verified):
+   *   base form: skins/{championId}/{skinId}/{skinId}.fantome
+   *   form N:    skins/{championId}/{skinId}/{formId}/{formId}.fantome
+   * Idempotent — re-running overwrites `skin.variants` in place.
+   */
+  attachFormVariants(champions: Champion[]): void {
+    if (this.skinIdsMap.size === 0) return
+
+    // Group form entries by their parent's riot skin id
+    const formsByParent = new Map<number, { id: string; formNum: number; displayName: string }[]>()
+    for (const [id, name] of this.skinIdsMap) {
+      const match = name.match(FORM_NAME_PATTERN)
+      if (!match) continue
+      const parentId = this.skinIdsReverseMap.get(match[1])
+      if (!parentId || !/^\d+$/.test(parentId) || !/^\d+$/.test(id)) continue
+      const parent = parseInt(parentId, 10)
+      let list = formsByParent.get(parent)
+      if (!list) {
+        list = []
+        formsByParent.set(parent, list)
+      }
+      list.push({ id, formNum: parseInt(match[2], 10), displayName: name })
+    }
+    if (formsByParent.size === 0) return
+
+    const { owner, repo, branch, skinsPath } = this.getActiveRepository()
+    const blobBase = `https://github.com/${owner}/${repo}/blob/${branch}/${skinsPath}`
+    const rawBase = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${skinsPath}`
+
+    for (const champion of champions) {
+      for (const skin of champion.skins) {
+        const riotSkinId = champion.id * 1000 + skin.num
+        const forms = formsByParent.get(riotSkinId)
+        if (!forms) continue
+
+        const parentName = this.skinIdsMap.get(String(riotSkinId)) || skin.nameEn || skin.name
+        const basePath = `${champion.id}/${riotSkinId}/${riotSkinId}.fantome`
+        const items: SkinVariant[] = [
+          {
+            id: String(riotSkinId),
+            name: 'Form 1',
+            displayName: parentName,
+            githubUrl: `${blobBase}/${basePath}`,
+            downloadUrl: `${rawBase}/${basePath}`
+          },
+          ...forms
+            .sort((a, b) => a.formNum - b.formNum)
+            .map((form) => {
+              const formPath = `${champion.id}/${riotSkinId}/${form.id}/${form.id}.fantome`
+              return {
+                id: form.id,
+                name: `Form ${form.formNum}`,
+                displayName: form.displayName,
+                githubUrl: `${blobBase}/${formPath}`,
+                downloadUrl: `${rawBase}/${formPath}`
+              }
+            })
+        ]
+        skin.variants = {
+          type: skin.rarity === 'kExalted' ? 'exalted' : 'form',
+          items
+        }
+      }
+    }
+  }
+
+  /**
+   * Maps each exalted gear index to a LeagueSkins per-form preview PNG (raw URL).
+   * gearIndex 0 = base skin (its own .png); gearIndex k≥1 = the k-th "(Form N)"
+   * pseudo-id sorted ascending. Returns {} when the skin has no form entries.
+   * Repo layout: skins/{champId}/{baseId}/{formId}/{formId}.png (base: {baseId}.png).
+   */
+  getFormPreviewUrls(championId: number, skinNum: number): Record<number, string> {
+    if (this.skinIdsMap.size === 0) return {}
+
+    const baseId = championId * 1000 + skinNum
+    const baseName = this.skinIdsMap.get(String(baseId))
+    if (!baseName) return {}
+
+    // Collect this skin's form pseudo-ids via the "(Form N)" name suffix.
+    const forms: { id: string; formNum: number }[] = []
+    for (const [id, name] of this.skinIdsMap) {
+      const match = name.match(FORM_NAME_PATTERN)
+      if (!match || match[1] !== baseName || !/^\d+$/.test(id)) continue
+      forms.push({ id, formNum: parseInt(match[2], 10) })
+    }
+    forms.sort((a, b) => a.formNum - b.formNum)
+
+    const { owner, repo, branch, skinsPath } = this.getActiveRepository()
+    const rawBase = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${skinsPath}`
+
+    const urls: Record<number, string> = {}
+    urls[0] = `${rawBase}/${championId}/${baseId}/${baseId}.png`
+    forms.forEach((form, i) => {
+      urls[i + 1] = `${rawBase}/${championId}/${baseId}/${form.id}/${form.id}.png`
+    })
+    return urls
   }
 
   static getInstance(): RepositoryService {
