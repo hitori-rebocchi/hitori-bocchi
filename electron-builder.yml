@@ -27,6 +27,13 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!native/**'
+  - '!scripts/**'
+  - '!.fantome-verify/**'
+  - '!.re-workspace/**'
+  - '!.claude/**'
+  - '!**/*.bak'
+  - '!*_backup.txt'
+  - '!bun.lock'
 asarUnpack:
   - resources/**
 extraResources:
